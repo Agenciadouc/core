@@ -2,7 +2,7 @@
 
 Painel de performance para clientes da Agência DROS. Consolida métricas de Meta Ads, Google Ads e Kiwify em um único dashboard, com gráficos e qualificação de leads.
 
-**Repo:** https://github.com/soaresjoaoluiz1/core
+**Repo:** https://github.com/Agenciadouc/core
 **URL produção:** https://drosagencia.com.br/core
 
 ## Stack
