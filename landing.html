@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dros Performance — Painel de Performance para Agências</title>
+<meta property="og:title" content="Dros Performance — Inteligência de Dados para Agências">
+<meta property="og:description" content="Todos os dados dos seus clientes em um único painel. Meta Ads, Google Ads, Instagram, Analytics, Kiwify. Decisões baseadas em dados, não achismo.">
+<meta property="og:image" content="https://drosagencia.com.br/hub/logo-dros-bg-blue.png">
+<link rel="icon" type="image/png" href="https://drosagencia.com.br/hub/logo-dros-bg-blue.png">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #06040C; --bg2: #0C0916; --bg3: #131020;
+  --accent: #F5A623; --accent2: #FFAA83;
+  --green: #34A853; --blue: #4285F4; --purple: #9B59B6; --red: #EA4335;
+  --text: #F0EDF5; --text2: #9B96B0; --text3: #6E6887;
+  --border: rgba(255,255,255,0.06); --glow: rgba(245,166,35,0.12);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'Inter',sans-serif;line-height:1.7;overflow-x:hidden}
+h1,h2,h3,h4{font-family:'Outfit',sans-serif;line-height:1.2}
+a{color:var(--accent);text-decoration:none}
+
+.nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:16px 0;transition:all .3s}
+.nav.scrolled{background:rgba(6,4,12,.95);backdrop-filter:blur(20px);border-bottom:1px solid var(--border)}
+.nav-inner{max-width:1100px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between}
+.nav-logo{height:36px}
+.nav-links{display:flex;gap:28px;align-items:center}
+.nav-links a{color:var(--text2);font-size:14px;font-weight:500;transition:color .2s}
+.nav-links a:hover{color:var(--text)}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;border:none;font-family:'Inter',sans-serif;transition:all .3s;text-decoration:none}
+.btn-primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06040C;box-shadow:0 4px 20px var(--glow)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(245,166,35,.3)}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--text2)}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent)}
+.btn-lg{padding:16px 36px;font-size:16px;border-radius:12px}
+
+.hero{min-height:100vh;display:flex;align-items:center;padding:120px 24px 80px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-300px;right:-200px;width:700px;height:700px;background:radial-gradient(circle,rgba(245,166,35,.06),transparent 70%);border-radius:50%}
+.hero::after{content:'';position:absolute;bottom:-200px;left:-150px;width:500px;height:500px;background:radial-gradient(circle,rgba(66,133,244,.05),transparent 70%);border-radius:50%}
+.hero-inner{max-width:1100px;margin:0 auto;text-align:center;position:relative;z-index:1}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(245,166,35,.1);border:1px solid rgba(245,166,35,.2);color:var(--accent);padding:6px 16px;border-radius:50px;font-size:12px;font-weight:700;letter-spacing:.5px;margin-bottom:24px}
+.hero h1{font-size:clamp(36px,5.5vw,56px);font-weight:800;margin-bottom:20px;max-width:800px;margin-left:auto;margin-right:auto}
+.hero h1 span{background:linear-gradient(135deg,var(--accent),var(--accent2));-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero p{font-size:18px;color:var(--text2);margin-bottom:36px;max-width:600px;margin-left:auto;margin-right:auto}
+.hero-ctas{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-bottom:60px}
+
+.integrations{display:flex;gap:20px;justify-content:center;flex-wrap:wrap;margin-top:20px}
+.integration{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--bg2);border:1px solid var(--border);border-radius:10px;font-size:13px;color:var(--text2);font-weight:500}
+.integration .dot{width:8px;height:8px;border-radius:50%}
+
+.section{padding:100px 24px}
+.section-inner{max-width:1100px;margin:0 auto}
+.section-tag{display:inline-block;background:rgba(245,166,35,.1);color:var(--accent);padding:4px 14px;border-radius:50px;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin-bottom:14px}
+.section h2{font-size:clamp(28px,4vw,40px);font-weight:800;margin-bottom:16px}
+.section p.sub{font-size:16px;color:var(--text2);max-width:560px;margin-bottom:48px}
+.text-center{text-align:center}
+.text-center p.sub{margin-left:auto;margin-right:auto}
+
+.features-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.feature-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:28px;transition:all .3s}
+.feature-card:hover{border-color:rgba(245,166,35,.15);transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.3)}
+.feature-icon{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:16px}
+.feature-card h3{font-size:16px;font-weight:700;margin-bottom:8px}
+.feature-card p{font-size:13px;color:var(--text2);line-height:1.6}
+
+.metrics-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:40px}
+.metric-box{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:24px;text-align:center}
+.metric-value{font-family:'JetBrains Mono',monospace;font-size:28px;font-weight:700;margin-bottom:4px}
+.metric-label{font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:1px}
+
+.compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center;margin-top:48px}
+.compare-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px}
+.compare-card h3{font-size:18px;font-weight:700;margin-bottom:16px}
+.compare-item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+.compare-item:last-child{border-bottom:none}
+.compare-item .old{color:var(--red);text-decoration:line-through}
+.compare-item .new{color:var(--green);font-weight:600}
+
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;counter-reset:step}
+.step{text-align:center;padding:28px 20px}
+.step::before{counter-increment:step;content:counter(step);display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06040C;font-family:'Outfit',sans-serif;font-size:16px;font-weight:800;margin:0 auto 16px}
+.step h3{font-size:15px;font-weight:700;margin-bottom:6px}
+.step p{font-size:13px;color:var(--text2)}
+
+.pricing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;max-width:900px;margin:0 auto}
+.price-card{background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:32px;text-align:center;transition:all .3s}
+.price-card.featured{border-color:var(--accent);box-shadow:0 0 40px var(--glow);position:relative}
+.price-card.featured::before{content:'RECOMENDADO';position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:linear-gradient(135deg,var(--accent),var(--accent2));color:#06040C;font-size:10px;font-weight:800;letter-spacing:1px;padding:4px 16px;border-radius:50px}
+.price-name{font-family:'Outfit';font-size:18px;font-weight:700;margin-bottom:8px}
+.price-value{font-family:'Outfit';font-size:38px;font-weight:800;margin-bottom:4px}
+.price-value span{font-size:14px;color:var(--text2);font-weight:400}
+.price-period{font-size:12px;color:var(--text3);margin-bottom:20px}
+.price-features{list-style:none;text-align:left;margin-bottom:24px}
+.price-features li{font-size:13px;color:var(--text2);padding:5px 0;display:flex;align-items:center;gap:10px}
+.price-features li::before{content:'\2713';color:var(--green);font-weight:700;font-size:12px}
+
+.cta-section{background:linear-gradient(135deg,rgba(245,166,35,.06),rgba(66,133,244,.04));border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
+.footer{padding:40px 24px;text-align:center;border-top:1px solid var(--border)}
+.footer p{font-size:13px;color:var(--text3)}
+
+@media(max-width:768px){
+  .hero h1{font-size:32px}
+  .features-grid,.pricing-grid{grid-template-columns:1fr}
+  .metrics-row{grid-template-columns:1fr 1fr}
+  .compare-grid{grid-template-columns:1fr}
+  .steps{grid-template-columns:1fr 1fr}
+  .nav-links a:not(.btn){display:none}
+}
+</style>
+</head>
+<body>
+
+<nav class="nav" id="nav">
+  <div class="nav-inner">
+    <img src="https://drosagencia.com.br/wp-content/uploads/2025/12/DROS-LOGO-1-1024x1024.png" alt="Dros" class="nav-logo">
+    <div class="nav-links">
+      <a href="#features">Funcionalidades</a>
+      <a href="#como">Como funciona</a>
+      <a href="#preco">Preços</a>
+      <a href="#" class="btn btn-ghost">Login</a>
+      <a href="#" class="btn btn-primary">Agendar demo</a>
+    </div>
+  </div>
+</nav>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-badge">&#128202; Inteligência de dados para agências</div>
+    <h1>Todos os dados dos seus clientes em <span>um único painel</span></h1>
+    <p>Meta Ads, Google Ads, Instagram, Analytics, CRM, Kiwify. Tudo centralizado, com comparação de períodos e tomada de decisão assistida por dados.</p>
+    <div class="hero-ctas">
+      <a href="#preco" class="btn btn-primary btn-lg">Começar agora &#8594;</a>
+      <a href="#features" class="btn btn-ghost btn-lg">Ver funcionalidades</a>
+    </div>
+    <div class="integrations">
+      <div class="integration"><span class="dot" style="background:#4267B2"></span> Meta Ads</div>
+      <div class="integration"><span class="dot" style="background:#4285F4"></span> Google Ads</div>
+      <div class="integration"><span class="dot" style="background:#E1306C"></span> Instagram</div>
+      <div class="integration"><span class="dot" style="background:#F9AB00"></span> Analytics</div>
+      <div class="integration"><span class="dot" style="background:#34A853"></span> CRM</div>
+      <div class="integration"><span class="dot" style="background:#49C7A0"></span> Kiwify</div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--bg2)">
+  <div class="section-inner text-center">
+    <div class="section-tag">O problema</div>
+    <h2>Cansou de abrir 10 abas pra montar um relatório?</h2>
+    <p class="sub">Sua equipe perde horas toda semana coletando dados de plataformas diferentes. E o cliente ainda reclama que o relatório demora.</p>
+    <div class="compare-grid">
+      <div class="compare-card">
+        <h3 style="color:var(--red)">&#10007; Sem o Dros Performance</h3>
+        <div class="compare-item"><span>Abrir Meta Ads Manager</span><span class="old">15 min</span></div>
+        <div class="compare-item"><span>Abrir Google Ads</span><span class="old">10 min</span></div>
+        <div class="compare-item"><span>Abrir Analytics</span><span class="old">10 min</span></div>
+        <div class="compare-item"><span>Cruzar dados no Excel</span><span class="old">30 min</span></div>
+        <div class="compare-item"><span>Montar relatório</span><span class="old">45 min</span></div>
+        <div class="compare-item" style="font-weight:700"><span>Total por cliente</span><span class="old">~2 horas</span></div>
+      </div>
+      <div class="compare-card">
+        <h3 style="color:var(--green)">&#10003; Com o Dros Performance</h3>
+        <div class="compare-item"><span>Abrir o painel</span><span class="new">5 seg</span></div>
+        <div class="compare-item"><span>Selecionar o cliente</span><span class="new">2 seg</span></div>
+        <div class="compare-item"><span>Todos os dados prontos</span><span class="new">Automático</span></div>
+        <div class="compare-item"><span>Comparação de períodos</span><span class="new">1 clique</span></div>
+        <div class="compare-item"><span>Insights e alertas</span><span class="new">Automático</span></div>
+        <div class="compare-item" style="font-weight:700"><span>Total por cliente</span><span class="new">~30 seg</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="features">
+  <div class="section-inner text-center">
+    <div class="section-tag">Funcionalidades</div>
+    <h2>Tudo integrado, tudo automático</h2>
+    <p class="sub">Conecte as contas uma vez. Os dados atualizam sozinhos, em tempo real.</p>
+    <div class="features-grid">
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(66,103,178,.1);color:#4267B2">&#128200;</div>
+        <h3>Meta Ads Completo</h3>
+        <p>Investimento, leads, conversas, CPL, ROAS, funil de conversão, campanhas com comparação de período anterior.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(66,133,244,.1);color:var(--blue)">&#128270;</div>
+        <h3>Google Ads Detalhado</h3>
+        <p>Campanhas, palavras-chave, termos de busca, dispositivos, horários, impression share. Análise completa.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(225,48,108,.1);color:#E1306C">&#128247;</div>
+        <h3>Instagram Insights</h3>
+        <p>Seguidores, alcance, engajamento, melhores posts. Evolução orgânica do perfil do cliente.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(249,171,0,.1);color:#F9AB00">&#128202;</div>
+        <h3>Google Analytics 4</h3>
+        <p>Sessões, usuários, taxa de rejeição, fontes de tráfego, páginas mais visitadas, conversões do site.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(245,166,35,.1);color:var(--accent)">&#128176;</div>
+        <h3>Visão Geral Unificada</h3>
+        <p>KPIs de todas as fontes em uma tela: investimento total, conversões, CPL, sessões, vendas. Tudo cruzado.</p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon" style="background:rgba(52,168,83,.1);color:var(--green)">&#128197;</div>
+        <h3>Períodos Personalizados</h3>
+        <p>7, 14, 30, 90 dias ou datas customizadas. Sempre com comparação automática do período anterior.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" style="background:var(--bg2)">
+  <div class="section-inner text-center">
+    <div class="section-tag">Diferenciais</div>
+    <h2>Por que agências escolhem o Dros Performance</h2>
+    <p class="sub">Não é só um dashboard. É inteligência de negócios pra agência.</p>
+    <div class="metrics-row">
+      <div class="metric-box">
+        <div class="metric-value" style="color:var(--accent)">6+</div>
+        <div class="metric-label">Plataformas integradas</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" style="color:var(--green)">30s</div>
+        <div class="metric-label">Pra ver tudo do cliente</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" style="color:var(--blue)">100%</div>
+        <div class="metric-label">Automático via API</div>
+      </div>
+      <div class="metric-box">
+        <div class="metric-value" style="color:var(--purple)">&#8734;</div>
+        <div class="metric-label">Clientes por painel</div>
+      </div>
+    </div>
+    <div class="features-grid" style="grid-template-columns:repeat(2,1fr)">
+      <div class="feature-card">
+        <h3>&#129302; IA para Tomada de Decisão</h3>
+        <p>Alertas automáticos quando o CPL sobe, o ROAS cai ou a taxa de rejeição está alta. O painel pensa junto com você.</p>
+      </div>
+      <div class="feature-card">
+        <h3>&#128200; Deduplicação Inteligente</h3>
+        <p>Leads de formulário e conversas do WhatsApp são contados corretamente, sem inflar números. Dados reais.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="como">
+  <div class="section-inner text-center">
+    <div class="section-tag">Como funciona</div>
+    <h2>3 passos e pronto</h2>
+    <p class="sub">Sem instalação, sem configuração complicada.</p>
+    <div class="steps" style="grid-template-columns:repeat(3,1fr)">
+      <div class="step">
+        <h3>Conecte as contas</h3>
+        <p>Meta Ads, Google Ads, Analytics, Instagram. Uma vez só, via OAuth seguro.</p>
+      </div>
+      <div class="step">
+        <h3>Dados aparecem sozinhos</h3>
+        <p>O painel puxa tudo via API. Sem planilha, sem copiar e colar.</p>
+      </div>
+      <div class="step">
+        <h3>Analise e decida</h3>
+        <p>Troque de cliente em um clique. Compare períodos. Veja o funil completo.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section" id="preco" style="background:var(--bg2)">
+  <div class="section-inner text-center">
+    <div class="section-tag">Preços</div>
+    <h2>Invista menos do que 1 hora de trabalho manual</h2>
+    <p class="sub">O tempo que você economiza já paga o investimento.</p>
+    <div class="pricing-grid">
+      <div class="price-card">
+        <div class="price-name">Solo</div>
+        <div class="price-value">R$ 447<span>/mês</span></div>
+        <div class="price-period">até 10 contas</div>
+        <ul class="price-features">
+          <li>Meta Ads + Google Ads</li>
+          <li>Instagram Insights</li>
+          <li>Comparação de períodos</li>
+          <li>Visão Geral unificada</li>
+        </ul>
+        <a href="#" class="btn btn-ghost" style="width:100%;justify-content:center">Começar</a>
+      </div>
+      <div class="price-card featured">
+        <div class="price-name">Agência</div>
+        <div class="price-value">R$ 897<span>/mês</span></div>
+        <div class="price-period">contas ilimitadas</div>
+        <ul class="price-features">
+          <li>Tudo do Solo</li>
+          <li>Google Analytics 4</li>
+          <li>CRM integrado</li>
+          <li>Kiwify / e-commerce</li>
+          <li>Datas personalizadas</li>
+          <li>Suporte prioritário</li>
+        </ul>
+        <a href="#" class="btn btn-primary" style="width:100%;justify-content:center">Começar agora &#8594;</a>
+      </div>
+      <div class="price-card">
+        <div class="price-name">Enterprise</div>
+        <div class="price-value">Sob consulta</div>
+        <div class="price-period">white-label + API</div>
+        <ul class="price-features">
+          <li>Tudo do Agência</li>
+          <li>Marca própria (white-label)</li>
+          <li>API de integração</li>
+          <li>Relatórios PDF automáticos</li>
+          <li>Onboarding dedicado</li>
+        </ul>
+        <a href="#" class="btn btn-ghost" style="width:100%;justify-content:center">Falar com vendas</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="section cta-section">
+  <div class="section-inner text-center">
+    <h2>Pare de perder horas montando relatórios.<br>Deixe os dados virem até você.</h2>
+    <p class="sub">Seus clientes merecem dados precisos. Sua equipe merece menos trabalho manual.</p>
+    <a href="#" class="btn btn-primary btn-lg">Agendar demonstração &#8594;</a>
+  </div>
+</section>
+
+<footer class="footer">
+  <img src="https://drosagencia.com.br/wp-content/uploads/2025/12/DROS-LOGO-1-1024x1024.png" alt="Dros" style="height:32px;margin-bottom:12px;opacity:.6">
+  <p>&copy; 2026 Dros Agência. Todos os direitos reservados.</p>
+</footer>
+
+<script>
+const nav=document.getElementById('nav')
+window.addEventListener('scroll',()=>{nav.classList.toggle('scrolled',window.scrollY>50)})
+const observer=new IntersectionObserver(e=>{e.forEach(e=>{if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)'}})},{threshold:.1})
+document.querySelectorAll('.feature-card,.step,.metric-box,.compare-card,.price-card,.integration').forEach(el=>{el.style.opacity='0';el.style.transform='translateY(24px)';el.style.transition='all .6s ease';observer.observe(el)})
+</script>
+</body>
+</html>
