@@ -88,50 +88,17 @@ export default function InstagramView({ accountName }: Props) {
   const [loadingData, setLoadingData] = useState(false)
 
   useEffect(() => {
-    fetchIGAccounts()
+    // Backend ja resolve pelo core_ig_page_id do Hub quando ?name=X e passado.
+    // Se cliente esta no Hub sem IG vinculada, retorna vazio (evita cross-contamination).
+    fetchIGAccounts(accountName || undefined)
       .then((accs) => {
         setAccounts(accs)
-        if (accountName) {
-          // Extract meaningful words from ad account name to match against IG accounts
-          // e.g., "00 - Invista Venda" -> check if IG pageName/username contains "invista"
-          // e.g., "CA - Fernando Correa" -> check for "fernando"
-          const lower = accountName.toLowerCase()
-          // Remove common prefixes like "CA -", "CA-", "00 -", digits
-          const cleaned = lower.replace(/^(ca\s*-?\s*|[\d]+\s*-\s*)/i, '').trim()
-          // Extract key words (at least 3 chars)
-          const words = cleaned.split(/[\s\-]+/).filter(w => w.length >= 3)
-
-          const match = accs.find(a => {
-            const pageLower = (a.pageName || '').toLowerCase()
-            const userLower = (a.username || '').toLowerCase()
-            const nameLower = (a.name || '').toLowerCase()
-            // Check if any significant word from ad account name appears in IG account
-            return words.some(w =>
-              pageLower.includes(w) || userLower.includes(w) || nameLower.includes(w)
-            )
-          })
-          // Only set matched accounts — if no match, show empty state
-          if (match) {
-            // Filter accounts to only those matching the same client
-            const filtered = accs.filter(a => {
-              const pageLower = (a.pageName || '').toLowerCase()
-              const userLower = (a.username || '').toLowerCase()
-              const nameLower = (a.name || '').toLowerCase()
-              return words.some(w =>
-                pageLower.includes(w) || userLower.includes(w) || nameLower.includes(w)
-              )
-            })
-            setAccounts(filtered)
-            setSelectedAccount(match)
-          } else {
-            setAccounts([])
-            setSelectedAccount(null)
-          }
-        } else if (accs.length > 0) {
-          setSelectedAccount(accs[0])
-        }
+        setSelectedAccount(accs.length > 0 ? accs[0] : null)
       })
-      .catch(() => {})
+      .catch(() => {
+        setAccounts([])
+        setSelectedAccount(null)
+      })
       .finally(() => setLoadingAccounts(false))
   }, [accountName])
 

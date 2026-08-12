@@ -296,8 +296,9 @@ export interface IGMedia {
   insights: Record<string, number>
 }
 
-export async function fetchIGAccounts(): Promise<IGAccount[]> {
-  const data = await apiFetch<{ accounts: IGAccount[] }>('/api/instagram/accounts')
+export async function fetchIGAccounts(accountName?: string): Promise<IGAccount[]> {
+  const qs = accountName ? `?name=${encodeURIComponent(accountName)}` : ''
+  const data = await apiFetch<{ accounts: IGAccount[] }>(`/api/instagram/accounts${qs}`)
   return data.accounts
 }
 

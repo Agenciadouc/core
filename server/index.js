@@ -54,6 +54,31 @@ let GOOGLE_ADS_LOGIN_CUSTOMER_ID = process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID
 
 // Nomes de clientes vindos do Hub (substituem/expandem ALLOWED_CLIENTS hardcoded)
 let HUB_CLIENT_NAMES = []
+// Config completa dos clientes vinda do Hub (core_client_name + core_meta_account_id +
+// core_ig_page_id + core_gads_customer_id + core_ga4_property_id). Usada pra fixar
+// exatamente qual IG/Meta/Ads pegar por cliente, sem fuzzy match ambiguo.
+let HUB_CLIENTS = []
+
+// Retorna a config do cliente Hub que casa com o accountName recebido do frontend.
+// Match ordem: core_client_name === name → name (raw) === name → substring.
+// Retorna null se nao achar (a rota decide fazer fallback ou nao).
+function getHubClientConfig(accountName) {
+  if (!accountName) return null
+  const lower = accountName.toLowerCase().trim()
+  // Match exato primeiro
+  const exact = HUB_CLIENTS.find(c => {
+    const coreName = (c.core_client_name || '').toLowerCase().trim()
+    const name     = (c.name || '').toLowerCase().trim()
+    return (coreName && coreName === lower) || (name && name === lower)
+  })
+  if (exact) return exact
+  // Substring como fallback (caso accountName venha de outra fonte, ex: "CA - Gui Autocar Mecanica")
+  return HUB_CLIENTS.find(c => {
+    const coreName = (c.core_client_name || '').toLowerCase().trim()
+    const name     = (c.name || '').toLowerCase().trim()
+    return (coreName && lower.includes(coreName)) || (name && lower.includes(name))
+  }) || null
+}
 
 // Fetch tokens + lista de clientes do Hub. Roda no startup e a cada 10 min.
 async function syncFromHub() {
@@ -76,8 +101,10 @@ async function syncFromHub() {
     }
     if (clientsRes.ok) {
       const { clients } = await clientsRes.json()
+      HUB_CLIENTS = clients
       HUB_CLIENT_NAMES = clients.map(c => (c.core_client_name || c.name || '').trim()).filter(Boolean)
-      console.log('[Hub sync] clientes recebidos:', HUB_CLIENT_NAMES.length)
+      console.log('[Hub sync] clientes recebidos:', HUB_CLIENTS.length,
+        '| com IG vinculada:', HUB_CLIENTS.filter(c => c.core_ig_page_id).length)
     }
   } catch (err) {
     console.error('[Hub sync] falhou (usando fallback .env):', err.message)
@@ -339,8 +366,12 @@ app.get('/api/meta/accounts/:accountId/insights/daily-compare', auth, async (req
 // =============================================
 
 // Get all Instagram business accounts linked to Facebook Pages
+// Se ?name=X for passado e o cliente estiver no Hub com core_ig_page_id vinculado,
+// retorna SOMENTE aquela pagina (evita fuzzy match cross-cliente no frontend).
+// Se cliente esta no Hub sem IG vinculada, retorna array vazio (nao mostra dados de outro).
 app.get('/api/instagram/accounts', auth, async (req, res) => {
   try {
+    const accountName = (req.query.name || '').trim()
     let allPages = []
     let url = `${META_BASE}/me/accounts?fields=id,name,instagram_business_account{id,name,username,followers_count,follows_count,media_count,profile_picture_url}&limit=100&access_token=${META_TOKEN}`
     while (url) {
@@ -350,6 +381,30 @@ app.get('/api/instagram/accounts', auth, async (req, res) => {
       allPages = allPages.concat(data.data || [])
       url = data.paging?.next || null
     }
+
+    // Se cliente foi passado, resolve pelo Hub
+    if (accountName) {
+      const hubCfg = getHubClientConfig(accountName)
+      const pinnedIgPageId = hubCfg?.core_ig_page_id?.trim() || null
+      if (pinnedIgPageId) {
+        const match = allPages.find(p =>
+          p.instagram_business_account &&
+          (p.id === pinnedIgPageId || p.instagram_business_account.id === pinnedIgPageId)
+        )
+        const igAccounts = match ? [{
+          pageId: match.id,
+          pageName: match.name,
+          ...match.instagram_business_account,
+        }] : []
+        return res.json({ accounts: igAccounts, source: 'hub-pinned' })
+      }
+      if (hubCfg) {
+        // Cliente no Hub mas sem IG vinculada → nao mostra dados de outro
+        return res.json({ accounts: [], source: 'hub-not-linked' })
+      }
+    }
+
+    // Fallback: retorna todas as pages permitidas (comportamento antigo, pra compat)
     const igAccounts = allPages
       .filter((p) => p.instagram_business_account && isAllowedAccount(p.name))
       .map((p) => ({
@@ -358,7 +413,7 @@ app.get('/api/instagram/accounts', auth, async (req, res) => {
         ...p.instagram_business_account,
       }))
       .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
-    res.json({ accounts: igAccounts })
+    res.json({ accounts: igAccounts, source: 'legacy-all' })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -2546,16 +2601,38 @@ app.get('/api/overview/:accountId', auth, async (req, res) => {
           allPages = allPages.concat(data.data || [])
           url = data.paging?.next || null
         }
-        const lower = accountName.toLowerCase()
-        const cleaned = lower.replace(/^(ca\s*-?\s*|[\d]+\s*-\s*)/i, '').trim()
-        const words = cleaned.split(/[\s\-]+/).filter(w => w.length >= 3)
-        const match = allPages.find(p => {
-          if (!p.instagram_business_account) return false
-          const pageLower = (p.name || '').toLowerCase()
-          const userLower = (p.instagram_business_account.username || '').toLowerCase()
-          return words.some(w => pageLower.includes(w) || userLower.includes(w))
-        })
-        if (!match) return { available: false }
+
+        // Resolve match: 1) core_ig_page_id explicito do Hub (match exato) → 2) fuzzy legacy
+        // Se cliente esta no Hub SEM core_ig_page_id vinculado, retorna unavailable
+        // (evita cross-contamination: nao mostrar conta de OUTRO cliente porque o nome bateu).
+        const hubCfg = getHubClientConfig(accountName)
+        const pinnedIgPageId = hubCfg?.core_ig_page_id?.trim() || null
+        let match = null
+
+        if (pinnedIgPageId) {
+          // Match exato pelo ID vinculado no Hub — aceita page_id ou instagram_business_account.id
+          match = allPages.find(p =>
+            p.id === pinnedIgPageId ||
+            p.instagram_business_account?.id === pinnedIgPageId
+          )
+          if (!match) return { available: false, reason: 'ig-not-accessible', pinnedIgPageId }
+        } else if (hubCfg) {
+          // Cliente esta no Hub mas nao vinculou pagina IG → nao mostra dados de outra conta
+          return { available: false, reason: 'not-linked-in-hub' }
+        } else {
+          // Fallback fuzzy: legacy pra clientes fora do Hub (ex: hardcoded ALLOWED_CLIENTS antigos)
+          const lower = accountName.toLowerCase()
+          const cleaned = lower.replace(/^(ca\s*-?\s*|[\d]+\s*-\s*)/i, '').trim()
+          const words = cleaned.split(/[\s\-]+/).filter(w => w.length >= 3)
+          match = allPages.find(p => {
+            if (!p.instagram_business_account) return false
+            const pageLower = (p.name || '').toLowerCase()
+            const userLower = (p.instagram_business_account.username || '').toLowerCase()
+            return words.some(w => pageLower.includes(w) || userLower.includes(w))
+          })
+          if (!match) return { available: false }
+        }
+
         const igId = match.instagram_business_account.id
         const followers = match.instagram_business_account.followers_count || 0
         // Get reach + engagement
