@@ -17,9 +17,30 @@ if (!globalThis.fetch) {
   globalThis.fetch = mod.default
 }
 
-const META_TOKEN = process.env.META_ACCESS_TOKEN
+// Prioridade pro token: Hub (fonte da verdade em runtime) > .env local (fallback)
+// Isso alinha com o Core que faz syncFromHub e sobrescreve META_TOKEN na memoria.
+async function resolveToken() {
+  const HUB_URL = process.env.HUB_URL || 'http://localhost:3003'
+  const SECRET = process.env.CORE_EMBED_SECRET || 'dros-core-embed-2026-shared-key'
+  try {
+    const resp = await fetch(`${HUB_URL}/api/config/tokens`, { headers: { 'X-Core-Secret': SECRET } })
+    if (resp.ok) {
+      const { tokens } = await resp.json()
+      if (tokens?.META_ACCESS_TOKEN) {
+        console.log('Token pego do Hub (source of truth em runtime)')
+        return tokens.META_ACCESS_TOKEN
+      }
+    }
+    console.log(`Aviso: Hub em ${HUB_URL} nao retornou token — caindo no .env local`)
+  } catch (e) {
+    console.log(`Aviso: nao conectou no Hub (${e.message}) — caindo no .env local`)
+  }
+  return process.env.META_ACCESS_TOKEN
+}
+
+const META_TOKEN = await resolveToken()
 if (!META_TOKEN) {
-  console.error('ERRO: META_ACCESS_TOKEN nao encontrado no .env')
+  console.error('ERRO: nenhum token META encontrado (nem no Hub nem no .env)')
   process.exit(1)
 }
 
