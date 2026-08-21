@@ -139,10 +139,11 @@ async function main() {
 
     if (snapResult.status === 'fulfilled') {
       let totalDays = 0, totalRecs = 0
+      const failedLevels = []
       for (const [level, r] of Object.entries(snapResult.value)) {
         if (r.error) {
           parts.push(`${level[0]}!`)
-          hasError = true
+          failedLevels.push(`${level}: ${r.error.substring(0, 150)}`)
           errorLog.push(`${acc.name} ${level}: ${r.error}`.substring(0, 200))
         } else {
           totalDays = Math.max(totalDays, r.days || 0)
@@ -150,6 +151,8 @@ async function main() {
         }
       }
       parts.push(`${totalDays}d/${totalRecs}reg`)
+      // conta como erro so se TODOS os levels falharam. Se so o ad falhou, ainda vale.
+      if (failedLevels.length === 4) hasError = true
     } else {
       parts.push('snap:ERR')
       hasError = true
@@ -170,6 +173,11 @@ async function main() {
 
   endRun(runId, okAccounts, errAccounts, errorLog.join('\n').substring(0, 4000))
   console.log(`\n=== CONCLUIDO — contas ok=${okAccounts} err=${errAccounts} ===`)
+  if (errorLog.length > 0) {
+    console.log(`\n=== ERROS DETALHADOS (${errorLog.length}) ===`)
+    for (const e of errorLog.slice(0, 30)) console.log('  ' + e)
+    if (errorLog.length > 30) console.log(`  ... e mais ${errorLog.length - 30}`)
+  }
   process.exit(0)
 }
 

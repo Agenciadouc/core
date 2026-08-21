@@ -12,14 +12,14 @@ const TIMEOUT_MS = 45000  // 45s por chamada Meta — se estourar, aborta e prop
 const ASYNC_POLL_TIMEOUT_MS = 300000  // 5 min max de polling do async job
 const ASYNC_POLL_INTERVAL_MS = 3000   // poll a cada 3s
 
-async function fetchWithTimeout(url) {
+async function fetchWithTimeout(url, opts = {}) {
   const ctrl = new AbortController()
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  const t = setTimeout(() => ctrl.abort(), opts.timeout || TIMEOUT_MS)
   try {
-    const resp = await fetch(url, { signal: ctrl.signal })
+    const resp = await fetch(url, { ...opts, signal: ctrl.signal })
     return resp
   } catch (e) {
-    if (e.name === 'AbortError') throw new Error(`Timeout ${TIMEOUT_MS/1000}s`)
+    if (e.name === 'AbortError') throw new Error(`Timeout ${(opts.timeout || TIMEOUT_MS)/1000}s`)
     throw e
   } finally {
     clearTimeout(t)
@@ -42,11 +42,16 @@ async function metaFetch(path, params, token) {
  * https://developers.facebook.com/docs/marketing-api/insights/best-practices/
  */
 async function metaAsyncInsights(accountId, params, token, maxPages = 30) {
-  // 1. Cria job
-  const createUrl = new URL(`${META_BASE}/${accountId}/insights`)
-  createUrl.searchParams.set('access_token', token)
-  for (const [k, v] of Object.entries(params || {})) createUrl.searchParams.set(k, v)
-  const createResp = await fetchWithTimeout(createUrl.toString())
+  // 1. Cria job — Meta EXIGE POST (nao GET)
+  const createUrl = `${META_BASE}/${accountId}/insights`
+  const body = new URLSearchParams()
+  body.set('access_token', token)
+  for (const [k, v] of Object.entries(params || {})) body.set(k, v)
+  const createResp = await fetchWithTimeout(createUrl, {
+    method: 'POST',
+    body: body.toString(),
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
   const createData = await createResp.json()
   if (createData.error) throw new Error('async create: ' + createData.error.message)
   const runId = createData.report_run_id
