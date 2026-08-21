@@ -282,54 +282,83 @@ function getDateRanges(days, since, until) {
   }
 }
 
-// List ad accounts — source of truth eh o Hub.
-// So retorna contas Meta cujo id esta em HUB_CLIENTS[].core_meta_account_id.
-// Cliente inativado no Hub some da lista automaticamente.
-// Display name usa core_client_name || name do Hub (nao o nome vindo da Meta).
+// List ad accounts — MONTADA DIRETO DO HUB (sem chamar Meta pra listar).
+// Isso evita bater no rate limit toda vez que o dashboard abre.
+// Os dados de insights ja vem do cache SQLite (endpoints /cached/*).
+// Se quiser info extra da Meta (amount_spent atual, currency), o Meta API
+// so eh chamada UMA VEZ e cacheada — se der rate limit, cai no Hub-only.
+let META_ACCOUNTS_CACHE = { data: null, at: 0 }
+const META_ACCOUNTS_TTL_MS = 30 * 60 * 1000  // 30 min
+
+async function fetchMetaAccountsCached() {
+  const now = Date.now()
+  if (META_ACCOUNTS_CACHE.data && (now - META_ACCOUNTS_CACHE.at) < META_ACCOUNTS_TTL_MS) {
+    return META_ACCOUNTS_CACHE.data
+  }
+  try {
+    let all = []
+    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status,currency,amount_spent&limit=200&access_token=${META_TOKEN}`
+    while (url) {
+      const resp = await fetch(url)
+      const data = await resp.json()
+      if (data.error) throw new Error(data.error.message)
+      all = all.concat(data.data || [])
+      url = data.paging?.next || null
+    }
+    META_ACCOUNTS_CACHE = { data: all, at: now }
+    return all
+  } catch (err) {
+    // Se Meta falhou (rate limit etc), retorna o cache velho se existir
+    if (META_ACCOUNTS_CACHE.data) return META_ACCOUNTS_CACHE.data
+    return []
+  }
+}
+
 app.get('/api/meta/accounts', auth, async (req, res) => {
   try {
     // Se Hub sync ainda nao rodou (HUB_CLIENTS vazio), forca uma vez antes
     if (!HUB_CLIENTS.length) await syncFromHub()
 
-    // Mapa: metaId → hubClient
-    const hubMap = new Map()
-    for (const c of HUB_CLIENTS) {
-      const rawId = (c.core_meta_account_id || '').trim()
-      if (!rawId) continue
-      // Aceita com ou sem prefixo act_
-      const withPrefix = rawId.startsWith('act_') ? rawId : `act_${rawId}`
-      hubMap.set(withPrefix, c)
-      hubMap.set(rawId, c)  // duplica sem prefixo por seguranca
-    }
+    // Constroi lista base direto do Hub — nao precisa Meta pra saber o que existe
+    const hubAccounts = HUB_CLIENTS
+      .filter(c => (c.core_meta_account_id || '').trim())
+      .map(c => {
+        const rawId = c.core_meta_account_id.trim()
+        const withPrefix = rawId.startsWith('act_') ? rawId : `act_${rawId}`
+        return {
+          id: withPrefix,
+          name: (c.core_client_name || c.name || 'Sem nome').trim(),
+          account_status: 1,       // assume ativa (Meta seria a fonte real, mas Hub controla o filtro)
+          currency: 'BRL',
+          amount_spent: '0',
+          _hub_client_id: c.id,
+        }
+      })
 
-    if (hubMap.size === 0) {
+    if (hubAccounts.length === 0) {
       return res.json({ accounts: [], warning: 'Nenhum cliente com conta Meta configurada no Hub' })
     }
 
-    let allAccounts = []
-    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status,currency,amount_spent&limit=200&access_token=${META_TOKEN}`
-    while (url) {
-      const resp = await fetch(url)
-      const data = await resp.json()
-      if (data.error) return res.status(400).json(data)
-      allAccounts = allAccounts.concat(data.data || [])
-      url = data.paging?.next || null
+    // Best effort: enriquece com dados Meta se disponivel (cacheado 30min, tolera rate limit)
+    try {
+      const metaAccounts = await fetchMetaAccountsCached()
+      if (metaAccounts.length > 0) {
+        const metaMap = new Map(metaAccounts.map(a => [a.id, a]))
+        for (const hubAcc of hubAccounts) {
+          const meta = metaMap.get(hubAcc.id)
+          if (meta) {
+            hubAcc.account_status = meta.account_status
+            hubAcc.currency = meta.currency
+            hubAcc.amount_spent = meta.amount_spent
+          }
+        }
+      }
+    } catch (_) {
+      // Silently fail — usamos os dados-base do Hub
     }
 
-    const filtered = allAccounts
-      .filter(a => hubMap.has(a.id))
-      .map(a => {
-        const hubCfg = hubMap.get(a.id)
-        return {
-          ...a,
-          // Display name: prioriza core_client_name (apelido curto) > name do Hub > name Meta
-          name: (hubCfg.core_client_name || hubCfg.name || a.name).trim(),
-          _hub_client_id: hubCfg.id,
-        }
-      })
-      .sort((a, b) => a.name.localeCompare(b.name))
-
-    res.json({ accounts: filtered, total_hub_clients: hubMap.size / 2 })
+    hubAccounts.sort((a, b) => a.name.localeCompare(b.name))
+    res.json({ accounts: hubAccounts, total_hub_clients: hubAccounts.length })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
