@@ -8,31 +8,48 @@ import {
 
 const META_BASE = 'https://graph.facebook.com/v21.0'
 
+const TIMEOUT_MS = 45000  // 45s por chamada Meta — se estourar, aborta e propaga erro
+
+async function fetchWithTimeout(url) {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
+  try {
+    const resp = await fetch(url, { signal: ctrl.signal })
+    return resp
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error(`Timeout ${TIMEOUT_MS/1000}s`)
+    throw e
+  } finally {
+    clearTimeout(t)
+  }
+}
+
 async function metaFetch(path, params, token) {
   const url = new URL(`${META_BASE}${path}`)
   url.searchParams.set('access_token', token)
   for (const [k, v] of Object.entries(params || {})) url.searchParams.set(k, v)
-  const resp = await fetch(url.toString())
+  const resp = await fetchWithTimeout(url.toString())
   const data = await resp.json()
   if (data.error) throw new Error(data.error.message || 'Meta API error')
   return data
 }
 
-// Pagina automatica seguindo o cursor "next"
-async function metaFetchAll(path, params, token) {
+// Pagina automatica seguindo o cursor "next". Se paginas > maxPages, para.
+async function metaFetchAll(path, params, token, maxPages = 20) {
   const all = []
-  let next = null
   let firstUrl = new URL(`${META_BASE}${path}`)
   firstUrl.searchParams.set('access_token', token)
   for (const [k, v] of Object.entries(params || {})) firstUrl.searchParams.set(k, v)
 
   let url = firstUrl.toString()
-  while (url) {
-    const resp = await fetch(url)
+  let pages = 0
+  while (url && pages < maxPages) {
+    const resp = await fetchWithTimeout(url)
     const data = await resp.json()
     if (data.error) throw new Error(data.error.message || 'Meta API error')
     if (data.data) all.push(...data.data)
     url = data.paging?.next || null
+    pages++
   }
   return all
 }
@@ -44,7 +61,7 @@ function fmtDate(d) { return d.toISOString().split('T')[0] }
  * Salva insights nos 4 niveis (account/campaign/adset/ad) do dia.
  */
 export async function snapshotDayForAccount(accountId, token, date) {
-  const insightsFields = 'spend,impressions,clicks,cpc,cpm,ctr,reach,frequency,actions,cost_per_action_type,action_values'
+  const insightsFields = 'spend,impressions,clicks,ctr,reach,frequency,actions,action_values'
   const timeRange = JSON.stringify({ since: date, until: date })
 
   const results = {}
@@ -55,8 +72,8 @@ export async function snapshotDayForAccount(accountId, token, date) {
                                         : `campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,${insightsFields}`
     try {
       const data = await metaFetchAll(`/${accountId}/insights`, {
-        fields, time_range: timeRange, level, limit: '500',
-      }, token)
+        fields, time_range: timeRange, level, limit: '200',
+      }, token, 15)
       saveSnapshot(accountId, date, level, data)
       results[level] = data.length
     } catch (err) {
@@ -97,12 +114,12 @@ export async function updateStructureAndCreatives(accountId, token) {
     errors.push(`campaigns: ${e.message}`)
   }
 
-  // Ads com creative (thumbnail)
+  // Ads com creative (thumbnail) — campos minimos pra ficar leve
   try {
     const ads = await metaFetchAll(`/${accountId}/ads`, {
-      fields: 'id,name,status,effective_status,campaign_id,adset_id,creative{id,name,thumbnail_url,image_url,video_id,effective_object_story_id,body,title,call_to_action_type}',
-      limit: '200',
-    }, token)
+      fields: 'id,name,effective_status,campaign_id,adset_id,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id}',
+      limit: '50',   // paginas menores = respostas mais rapidas por request
+    }, token, 30)   // ate 30 paginas = 1500 ads maximos por conta
     for (const ad of ads) saveCreative(accountId, ad)
   } catch (e) {
     errors.push(`ads: ${e.message}`)
