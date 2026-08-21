@@ -13,6 +13,7 @@ import Sidebar from '../components/Sidebar'
 import MetricCards from '../components/MetricCards'
 import SpendChart from '../components/SpendChart'
 import CampaignTree from '../components/CampaignTree'
+import TopCreatives from '../components/TopCreatives'
 import FunnelChart from '../components/FunnelChart'
 import InstagramView from '../components/InstagramView'
 import CRMView from '../components/CRMView'
@@ -259,6 +260,16 @@ export default function Dashboard() {
                       <CampaignTree
                         currentCampaigns={campaignCompare?.current || []}
                         previousCampaigns={campaignCompare?.previous || []}
+                        days={getEffectiveDays()}
+                        since={showCustomDates && customDateFrom ? customDateFrom : undefined}
+                        until={showCustomDates && customDateTo ? customDateTo : undefined}
+                      />
+                    </section>
+
+                    <section className="dash-section">
+                      <div className="section-title">Top Criativos</div>
+                      <TopCreatives
+                        accountId={selectedAccount.id}
                         days={getEffectiveDays()}
                         since={showCustomDates && customDateFrom ? customDateFrom : undefined}
                         until={showCustomDates && customDateTo ? customDateTo : undefined}

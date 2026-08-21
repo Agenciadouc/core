@@ -1515,6 +1515,34 @@ app.get('/api/meta/adsets/:adsetId/ads', auth, async (req, res) => {
   }
 })
 
+// Top ads da conta — todos os ads com insights + creative pra selecionar top N no frontend
+app.get('/api/meta/accounts/:accountId/top-ads', auth, async (req, res) => {
+  try {
+    const { accountId } = req.params
+    const { days = '30', since, until, limit = '200' } = req.query
+    const ranges = getDateRanges(parseInt(days), since, until)
+
+    const insightsField = `insights.time_range(${JSON.stringify(ranges.current)}){spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type}`
+    const creativeField = 'creative{id,name,thumbnail_url,image_url,video_id,effective_object_story_id,body,title,call_to_action_type}'
+
+    const data = await metaFetch(`/${accountId}/ads`, {
+      fields: `id,name,status,effective_status,campaign_id,adset_id,${creativeField},${insightsField}`,
+      filtering: JSON.stringify([{ field: 'ad.effective_status', operator: 'IN', value: ['ACTIVE','PAUSED','ADSET_PAUSED','CAMPAIGN_PAUSED'] }]),
+      limit: String(limit),
+    })
+
+    const ads = (data.data || []).map(a => ({
+      ...a,
+      insight: (a.insights && a.insights.data && a.insights.data[0]) || null,
+      insights: undefined,
+    })).filter(a => a.insight && parseFloat(a.insight.spend || '0') > 0)  // so ads que tiveram gasto no periodo
+
+    res.json({ data: ads, ranges })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Preview HTML de um ad — retorna iframe pronto do Meta
 // Formatos: DESKTOP_FEED_STANDARD, MOBILE_FEED_STANDARD, INSTAGRAM_STANDARD, INSTAGRAM_STORY, INSTAGRAM_REELS
 app.get('/api/meta/ads/:adId/preview', auth, async (req, res) => {

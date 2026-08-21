@@ -158,6 +158,25 @@ export async function fetchAdPreview(adId: string, format: AdPreviewFormat = 'DE
   return data.html || ''
 }
 
+// Top ads (para grid de criativos)
+export interface MetaTopAd {
+  id: string
+  name: string
+  status?: string
+  effective_status?: string
+  campaign_id?: string
+  adset_id?: string
+  creative?: MetaCreative
+  insight: MetaInsight | null
+}
+
+export async function fetchTopAds(accountId: string, days = 30, since?: string, until?: string, limit = 200): Promise<MetaTopAd[]> {
+  let url = `/api/meta/accounts/${accountId}/top-ads?days=${days}&limit=${limit}`
+  if (since && until) url += `&since=${since}&until=${until}`
+  const data = await apiFetch<{ data: MetaTopAd[] }>(url)
+  return data.data || []
+}
+
 // Helper to extract action value
 export function getAction(actions: MetaAction[] | undefined, type: string): number {
   const a = actions?.find((x) => x.action_type === type)
