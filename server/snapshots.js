@@ -61,8 +61,17 @@ function fmtDate(d) { return d.toISOString().split('T')[0] }
  * Salva insights nos 4 niveis (account/campaign/adset/ad) do dia.
  */
 export async function snapshotDayForAccount(accountId, token, date) {
+  return snapshotRangeForAccount(accountId, token, date, date)
+}
+
+/**
+ * NOVO — puxa TODO o range num numero minimo de chamadas Meta usando time_increment=1.
+ * Meta retorna 1 registro por dia por entidade, e a gente separa em snapshots diarios locais.
+ * Reduz de 4*N chamadas (uma por dia+level) pra apenas 4 chamadas totais (1 por level).
+ */
+export async function snapshotRangeForAccount(accountId, token, since, until) {
   const insightsFields = 'spend,impressions,clicks,ctr,reach,frequency,actions,action_values'
-  const timeRange = JSON.stringify({ since: date, until: date })
+  const timeRange = JSON.stringify({ since, until })
 
   const results = {}
   for (const level of ['account', 'campaign', 'adset', 'ad']) {
@@ -72,10 +81,22 @@ export async function snapshotDayForAccount(accountId, token, date) {
                                         : `campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,${insightsFields}`
     try {
       const data = await metaFetchAll(`/${accountId}/insights`, {
-        fields, time_range: timeRange, level, limit: '200',
-      }, token, 15)
-      saveSnapshot(accountId, date, level, data)
-      results[level] = data.length
+        fields, time_range: timeRange, level,
+        time_increment: '1',   // <<< CHAVE: retorna 1 registro por dia por entidade
+        limit: '500',
+      }, token, 30)  // Ate 30 paginas = 15000 registros (500 x 30)
+
+      // Agrupa os N registros por dia (date_start) e salva um snapshot por dia
+      const byDate = new Map()
+      for (const r of data) {
+        const d = r.date_start
+        if (!byDate.has(d)) byDate.set(d, [])
+        byDate.get(d).push(r)
+      }
+      for (const [d, rows] of byDate.entries()) {
+        saveSnapshot(accountId, d, level, rows)
+      }
+      results[level] = { records: data.length, days: byDate.size }
     } catch (err) {
       results[level] = { error: err.message }
     }
@@ -134,19 +155,20 @@ export async function updateStructureAndCreatives(accountId, token) {
  */
 export async function syncAccount(accountId, token, daysBack = 2) {
   const today = new Date()
+  const end = new Date(today); end.setDate(end.getDate() - 1)  // ontem
+  const start = new Date(end); start.setDate(start.getDate() - daysBack + 1)
   const errors = []
-  let ok = 0
 
-  // Puxa dias D-daysBack ate D-1 (ontem inclusive, hoje NAO)
-  for (let i = daysBack; i >= 1; i--) {
-    const d = new Date(today); d.setDate(d.getDate() - i)
-    const date = fmtDate(d)
-    try {
-      await snapshotDayForAccount(accountId, token, date)
-      ok++
-    } catch (e) {
-      errors.push(`${date}: ${e.message}`)
+  // 1 chamada por level (4 total) puxa TODO o range de daysBack dias
+  let ok = 0
+  try {
+    const results = await snapshotRangeForAccount(accountId, token, fmtDate(start), fmtDate(end))
+    for (const [level, r] of Object.entries(results)) {
+      if (r.error) errors.push(`${level}: ${r.error}`)
+      else ok += r.days || 0
     }
+  } catch (e) {
+    errors.push(`range: ${e.message}`)
   }
 
   // Atualiza estrutura (nao eh diario, so uma vez por sync)

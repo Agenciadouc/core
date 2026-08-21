@@ -5,7 +5,7 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import { dirname, resolve } from 'path'
-import { snapshotDayForAccount, updateStructureAndCreatives } from '../server/snapshots.js'
+import { snapshotRangeForAccount, updateStructureAndCreatives } from '../server/snapshots.js'
 import { startRun, endRun } from '../server/db.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -122,27 +122,32 @@ async function main() {
       errorLog.push(`${acc.name}: estrutura ${e.message}`)
     }
 
-    // Snapshots dia a dia
+    // Snapshots do range inteiro em 4 chamadas Meta (1 por level), usando time_increment=1
     process.stdout.write('  snapshots: ')
-    let dayOk = 0, dayErr = 0
     const today = new Date()
-    for (let i = daysBack; i >= 1; i--) {
-      const d = new Date(today); d.setDate(d.getDate() - i)
-      const date = fmtDate(d)
-      try {
-        await snapshotDayForAccount(acc.id, META_TOKEN, date)
-        dayOk++
-        process.stdout.write('.')
-      } catch (e) {
-        dayErr++
-        process.stdout.write('x')
-        errorLog.push(`${acc.name} ${date}: ${e.message}`.substring(0, 200))
+    const end = new Date(today); end.setDate(end.getDate() - 1)
+    const start = new Date(end); start.setDate(start.getDate() - daysBack + 1)
+    let totalRecords = 0, hasError = false
+    try {
+      const results = await snapshotRangeForAccount(acc.id, META_TOKEN, fmtDate(start), fmtDate(end))
+      for (const [level, r] of Object.entries(results)) {
+        if (r.error) {
+          hasError = true
+          process.stdout.write(`${level[0]}!`)
+          errorLog.push(`${acc.name} ${level}: ${r.error}`.substring(0, 200))
+        } else {
+          totalRecords += r.records || 0
+          process.stdout.write(`${level[0]}${r.days || 0}`)
+        }
       }
+    } catch (e) {
+      hasError = true
+      errorLog.push(`${acc.name} range: ${e.message}`.substring(0, 200))
     }
     const elapsed = Math.round((Date.now() - t0) / 1000)
-    console.log(` ${dayOk}/${daysBack} ok em ${elapsed}s`)
+    console.log(` ${totalRecords} registros em ${elapsed}s`)
 
-    if (dayErr < daysBack / 2) okAccounts++
+    if (!hasError) okAccounts++
     else errAccounts++
 
     // Pausa 1s entre contas pra dar folga no rate limit Meta
