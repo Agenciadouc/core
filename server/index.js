@@ -282,11 +282,32 @@ function getDateRanges(days, since, until) {
   }
 }
 
-// List all ad accounts (filtered)
+// List ad accounts — source of truth eh o Hub.
+// So retorna contas Meta cujo id esta em HUB_CLIENTS[].core_meta_account_id.
+// Cliente inativado no Hub some da lista automaticamente.
+// Display name usa core_client_name || name do Hub (nao o nome vindo da Meta).
 app.get('/api/meta/accounts', auth, async (req, res) => {
   try {
+    // Se Hub sync ainda nao rodou (HUB_CLIENTS vazio), forca uma vez antes
+    if (!HUB_CLIENTS.length) await syncFromHub()
+
+    // Mapa: metaId → hubClient
+    const hubMap = new Map()
+    for (const c of HUB_CLIENTS) {
+      const rawId = (c.core_meta_account_id || '').trim()
+      if (!rawId) continue
+      // Aceita com ou sem prefixo act_
+      const withPrefix = rawId.startsWith('act_') ? rawId : `act_${rawId}`
+      hubMap.set(withPrefix, c)
+      hubMap.set(rawId, c)  // duplica sem prefixo por seguranca
+    }
+
+    if (hubMap.size === 0) {
+      return res.json({ accounts: [], warning: 'Nenhum cliente com conta Meta configurada no Hub' })
+    }
+
     let allAccounts = []
-    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status,currency,amount_spent&limit=100&access_token=${META_TOKEN}`
+    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status,currency,amount_spent&limit=200&access_token=${META_TOKEN}`
     while (url) {
       const resp = await fetch(url)
       const data = await resp.json()
@@ -294,10 +315,37 @@ app.get('/api/meta/accounts', auth, async (req, res) => {
       allAccounts = allAccounts.concat(data.data || [])
       url = data.paging?.next || null
     }
+
     const filtered = allAccounts
-      .filter((a) => [1, 2, 3].includes(a.account_status) && isAllowedAccount(a.name))
+      .filter(a => hubMap.has(a.id))
+      .map(a => {
+        const hubCfg = hubMap.get(a.id)
+        return {
+          ...a,
+          // Display name: prioriza core_client_name (apelido curto) > name do Hub > name Meta
+          name: (hubCfg.core_client_name || hubCfg.name || a.name).trim(),
+          _hub_client_id: hubCfg.id,
+        }
+      })
       .sort((a, b) => a.name.localeCompare(b.name))
-    res.json({ accounts: filtered })
+
+    res.json({ accounts: filtered, total_hub_clients: hubMap.size / 2 })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Forca sync com Hub agora (usar quando adicionar cliente novo no Hub e nao quer aguardar 10 min)
+app.post('/api/hub/refresh', auth, async (_req, res) => {
+  try {
+    await syncFromHub()
+    res.json({
+      ok: true,
+      hub_clients: HUB_CLIENTS.length,
+      with_meta: HUB_CLIENTS.filter(c => c.core_meta_account_id).length,
+      with_ig: HUB_CLIENTS.filter(c => c.core_ig_page_id).length,
+      with_gads: HUB_CLIENTS.filter(c => c.core_gads_customer_id).length,
+    })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
@@ -3156,12 +3204,28 @@ app.delete('/api/dashboard/templates/:id', auth, (req, res) => {
 // =============================================================================
 
 // Middleware: resolve slug -> accountId + config, sem exigir auth
+// Valida tambem que o cliente ainda esta ATIVO no Hub — se foi inativado,
+// o link publico automaticamente para de funcionar.
 function publicResolve(req, res, next) {
   const { slug } = req.params
   const found = getConfigBySlug(slug)
   if (!found) return res.status(404).json({ error: 'link publico nao encontrado' })
+
+  // Checa se cliente ainda tem conta Meta configurada e ativa no Hub
+  const accountIdWithPrefix = found.account_id.startsWith('act_') ? found.account_id : `act_${found.account_id}`
+  const accountIdWithoutPrefix = found.account_id.replace(/^act_/, '')
+  const hubClient = HUB_CLIENTS.find(c => {
+    const cid = (c.core_meta_account_id || '').trim()
+    return cid && (cid === accountIdWithPrefix || cid === accountIdWithoutPrefix || `act_${cid}` === accountIdWithPrefix)
+  })
+
+  if (!hubClient) {
+    return res.status(410).json({ error: 'link desativado pela agencia' })
+  }
+
   req.publicAccountId = found.account_id
   req.publicConfig = found.config
+  req.publicHubClient = hubClient
   next()
 }
 

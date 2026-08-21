@@ -22,7 +22,7 @@ import GoogleAdsView from '../components/GoogleAdsView'
 import AnalyticsView from '../components/AnalyticsView'
 import OverviewView from '../components/OverviewView'
 import { Search, LogOut, BarChart3, Instagram, LineChart, LayoutDashboard, Calendar, ChevronsLeft, ChevronsRight, Settings2, RefreshCw, Share2, Check, Copy, Link as LinkIcon, X, Eye } from 'lucide-react'
-import { fetchDashboardConfig, saveDashboardConfig as saveConfigApi, publishDashboard, unpublishDashboard, syncAccountNow, getAccountSyncStatus, DEFAULT_CONFIG, type DashboardConfig } from '../lib/dashboardConfig'
+import { fetchDashboardConfig, saveDashboardConfig as saveConfigApi, publishDashboard, unpublishDashboard, syncAccountNow, getAccountSyncStatus, refreshHub, DEFAULT_CONFIG, type DashboardConfig } from '../lib/dashboardConfig'
 import MetricPicker from '../components/MetricPicker'
 
 const DATE_OPTIONS = [
@@ -234,6 +234,19 @@ export default function Dashboard() {
 
         <div className="sidebar-footer">
           {!sidebarCollapsed && <div className="user-name">{user?.name}</div>}
+          <button
+            className="logout-btn"
+            title="Recarregar clientes do Hub"
+            onClick={async () => {
+              try {
+                const r = await refreshHub()
+                alert(`Sincronizado com Hub:\n${r.hub_clients} clientes\n${r.with_meta} com Meta\n${r.with_ig} com Instagram\n${r.with_gads} com Google Ads`)
+                const accs = await fetchAccounts()
+                setAccounts(accs)
+                if (!selectedAccount && accs.length > 0) setSelectedAccount(accs[0])
+              } catch (e: any) { alert('Erro ao atualizar do Hub: ' + e.message) }
+            }}
+          ><RefreshCw size={16} /></button>
           <button className="logout-btn" onClick={logout} title="Sair"><LogOut size={16} /></button>
         </div>
         <button className="sidebar-collapse-btn" onClick={toggleSidebar} title={sidebarCollapsed ? 'Expandir menu' : 'Recolher menu'}>

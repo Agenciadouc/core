@@ -68,27 +68,38 @@ function PreviewModal({ adId, adName, onClose }: { adId: string; adName: string;
 // ---------- Card ----------
 function CreativeCard({ ad, sortKey, onPreview }: { ad: MetaTopAd; sortKey: string; onPreview: (id: string, name: string) => void }) {
   const thumb = ad.creative?.thumbnail_url || ad.creative?.image_url
-  const showMetrics = ['spend', 'ctr', 'link_clicks', 'impressions', 'purchases', 'messaging', 'leads']
   const isActive = ad.effective_status === 'ACTIVE'
+
+  // Sempre mostra: spend + metrica de sort. Depois adiciona 2 outras que tenham valor > 0.
+  const priorityMetrics = ['spend', sortKey, 'ctr', 'link_clicks', 'purchases', 'messaging', 'leads', 'impressions']
+  const shown = new Set<string>()
+  const metricsToShow: string[] = []
+  for (const k of priorityMetrics) {
+    if (shown.has(k)) continue
+    const def = getMetric(k); if (!def) continue
+    const v = def.extract(ad.insight)
+    if (k === 'spend' || k === sortKey || v > 0) {
+      metricsToShow.push(k); shown.add(k)
+      if (metricsToShow.length >= 4) break
+    }
+  }
 
   return (
     <div className="creative-card">
       <button className="creative-thumb" onClick={() => onPreview(ad.id, ad.name || 'Ad')}>
         {thumb ? <img src={thumb} alt="" loading="lazy" /> : <div className="creative-thumb-empty">?</div>}
-        <div className="creative-thumb-overlay"><Eye size={22} /><span>Ver preview</span></div>
+        <div className="creative-thumb-overlay"><Eye size={18} /><span>Preview</span></div>
       </button>
       <div className="creative-body">
         <div className="creative-title" title={ad.name}>{ad.name || '(sem nome)'}</div>
         <div className="creative-status"><span className={`status-dot ${isActive ? 'on' : 'off'}`} />{ad.effective_status || '-'}</div>
         <div className="creative-metrics">
-          {showMetrics.map(key => {
+          {metricsToShow.map(key => {
             const def = getMetric(key); if (!def) return null
-            const val = def.extract(ad.insight)
-            if (val === 0 && key !== 'spend') return null
             return (
               <div key={key} className={`metric ${sortKey === key ? 'is-active' : ''}`}>
                 <div className="metric-label">{def.label}</div>
-                <div className="metric-value">{def.format(val)}</div>
+                <div className="metric-value">{def.format(def.extract(ad.insight))}</div>
               </div>
             )
           })}

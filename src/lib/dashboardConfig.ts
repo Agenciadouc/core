@@ -106,3 +106,8 @@ export async function syncAccountNow(accountId: string): Promise<{ ok: number; e
 export async function getAccountSyncStatus(accountId: string): Promise<{ last_update: string | null }> {
   return apiFetch(`/api/meta/cached/accounts/${accountId}/status`)
 }
+
+// Forca sync com Hub (pra pegar clientes novos sem esperar 10 min)
+export async function refreshHub(): Promise<{ ok: boolean; hub_clients: number; with_meta: number; with_ig: number; with_gads: number }> {
+  return apiFetch(`/api/hub/refresh`, { method: 'POST' })
+}
