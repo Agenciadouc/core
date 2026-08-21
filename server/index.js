@@ -14,6 +14,17 @@ if (!globalThis.fetch) {
   globalThis.URLSearchParams = globalThis.URLSearchParams || URL.URLSearchParams
 }
 
+// SQLite + snapshots + cron (Fase 0)
+import * as agg from './aggregate.js'
+import { syncAllAccounts, syncAccount } from './snapshots.js'
+import {
+  getDashboardConfig, saveDashboardConfig, setDashboardSlug, getConfigBySlug,
+  saveTemplate, listTemplates, getTemplate, removeTemplate,
+  getAccountLatestUpdate,
+} from './db.js'
+import cron from 'node-cron'
+import { nanoid } from 'nanoid'
+
 const __dirname = dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: resolve(__dirname, '../../.env') })
 
@@ -2922,6 +2933,369 @@ if (fs.existsSync(distPath)) {
   })
   console.log('[Dros Core] Serving frontend from /core/')
 }
+
+// =============================================================================
+// FASE 0 — ENDPOINTS CACHED (le do SQLite, formato compativel com /meta/*)
+// =============================================================================
+
+function resolveDateRange(days, since, until) {
+  if (since && until) return { since, until }
+  // ultimos N dias ate ontem (D-1)
+  const end = new Date(); end.setDate(end.getDate() - 1)
+  const start = new Date(end); start.setDate(start.getDate() - parseInt(days) + 1)
+  return { since: fmtDate(start), until: fmtDate(end) }
+}
+
+function calcPreviousRange(range) {
+  const start = new Date(range.since + 'T00:00:00')
+  const end = new Date(range.until + 'T00:00:00')
+  const diffDays = Math.ceil((end - start) / 86400000) + 1
+  const prevEnd = new Date(start); prevEnd.setDate(prevEnd.getDate() - 1)
+  const prevStart = new Date(prevEnd); prevStart.setDate(prevStart.getDate() - diffDays + 1)
+  return { since: fmtDate(prevStart), until: fmtDate(prevEnd) }
+}
+
+// Insights agregados por nivel (account/campaign) — equivalente ao /insights/compare
+app.get('/api/meta/cached/accounts/:accountId/insights/compare', auth, (req, res) => {
+  try {
+    const { accountId } = req.params
+    const { days = '30', level = 'account', since, until } = req.query
+    const current = resolveDateRange(days, since, until)
+    const previous = calcPreviousRange(current)
+
+    const currentData = level === 'campaign'
+      ? agg.getCampaignInsights(accountId, current.since, current.until)
+      : agg.getAccountInsights(accountId, current.since, current.until)
+    const previousData = level === 'campaign'
+      ? agg.getCampaignInsights(accountId, previous.since, previous.until)
+      : agg.getAccountInsights(accountId, previous.since, previous.until)
+
+    res.json({ current: currentData, previous: previousData, ranges: { current, previous } })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Insights por dia (para grafico) — equivalente ao /insights/daily-compare
+app.get('/api/meta/cached/accounts/:accountId/insights/daily-compare', auth, (req, res) => {
+  try {
+    const { accountId } = req.params
+    const { days = '30', since, until } = req.query
+    const current = resolveDateRange(days, since, until)
+    const previous = calcPreviousRange(current)
+
+    res.json({
+      current: agg.getDailyAccountInsights(accountId, current.since, current.until),
+      previous: agg.getDailyAccountInsights(accountId, previous.since, previous.until),
+      ranges: { current, previous },
+    })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Adsets de campanha com insights agregados
+app.get('/api/meta/cached/campaigns/:campaignId/adsets', auth, (req, res) => {
+  try {
+    const { campaignId } = req.params
+    const { days = '30', since, until, accountId } = req.query
+    if (!accountId) return res.status(400).json({ error: 'accountId query param required' })
+    const range = resolveDateRange(days, since, until)
+
+    const adsets = agg.getAdsets(accountId, campaignId)
+    const insights = agg.getAdsetInsightsByCampaign(accountId, campaignId, range.since, range.until)
+    const insightsMap = new Map(insights.map(i => [i.adset_id, i]))
+
+    const data = adsets.map(a => ({ ...a, insight: insightsMap.get(a.id) || null }))
+    res.json({ data, ranges: { current: range } })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Ads de adset com insights + creative
+app.get('/api/meta/cached/adsets/:adsetId/ads', auth, (req, res) => {
+  try {
+    const { adsetId } = req.params
+    const { days = '30', since, until, accountId } = req.query
+    if (!accountId) return res.status(400).json({ error: 'accountId query param required' })
+    const range = resolveDateRange(days, since, until)
+
+    const ads = agg.getAdsWithCreatives(accountId, adsetId)
+    const insights = agg.getAdInsightsByAdset(accountId, adsetId, range.since, range.until)
+    const insightsMap = new Map(insights.map(i => [i.ad_id, i]))
+
+    const data = ads.map(ad => ({ ...ad, insight: insightsMap.get(ad.id) || null }))
+    res.json({ data, ranges: { current: range } })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Top ads (todos os ads da conta com insights + creative, frontend ordena)
+app.get('/api/meta/cached/accounts/:accountId/top-ads', auth, (req, res) => {
+  try {
+    const { accountId } = req.params
+    const { days = '30', since, until } = req.query
+    const range = resolveDateRange(days, since, until)
+
+    const ads = agg.getAllAdsWithCreatives(accountId)
+    const insights = agg.getAllAdInsights(accountId, range.since, range.until)
+    const insightsMap = new Map(insights.map(i => [i.ad_id, i]))
+
+    const data = ads.map(ad => ({ ...ad, insight: insightsMap.get(ad.id) || null }))
+      .filter(ad => ad.insight && parseFloat(ad.insight.spend || '0') > 0)
+
+    res.json({ data, ranges: { current: range } })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Campanhas da conta (estrutura do cache)
+app.get('/api/meta/cached/accounts/:accountId/campaigns', auth, (req, res) => {
+  try {
+    res.json({ data: agg.getCampaigns(req.params.accountId) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Meta info: quando foi a ultima sync dessa conta
+app.get('/api/meta/cached/accounts/:accountId/status', auth, (req, res) => {
+  try {
+    const latest = agg.getAccountLastSync(req.params.accountId)
+    res.json({ last_update: latest })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =============================================================================
+// SYNC MANUAL (botao "Sincronizar" do dashboard)
+// =============================================================================
+app.post('/api/meta/sync/:accountId', auth, async (req, res) => {
+  try {
+    const { accountId } = req.params
+    const daysBack = parseInt(req.query.days || '2')
+    const result = await syncAccount(accountId, META_TOKEN, daysBack)
+    res.json({ ok: true, ...result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// =============================================================================
+// FASE A — DASHBOARD CONFIG (personalizacao)
+// =============================================================================
+
+app.get('/api/dashboard/config/:accountId', auth, (req, res) => {
+  try {
+    const cfg = getDashboardConfig(req.params.accountId)
+    res.json(cfg)
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.put('/api/dashboard/config/:accountId', auth, (req, res) => {
+  try {
+    const { config } = req.body || {}
+    if (!config) return res.status(400).json({ error: 'config required in body' })
+    saveDashboardConfig(req.params.accountId, config)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.post('/api/dashboard/config/:accountId/publish', auth, (req, res) => {
+  try {
+    const { accountId } = req.params
+    const existing = getDashboardConfig(accountId)
+    let slug = existing.public_slug
+    if (!slug) {
+      slug = nanoid(12)
+      setDashboardSlug(accountId, slug)
+    }
+    res.json({ slug })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+app.delete('/api/dashboard/config/:accountId/publish', auth, (req, res) => {
+  try {
+    setDashboardSlug(req.params.accountId, null)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Templates
+app.get('/api/dashboard/templates', auth, (_req, res) => res.json({ data: listTemplates() }))
+app.post('/api/dashboard/templates', auth, (req, res) => {
+  const { name, config } = req.body || {}
+  if (!name || !config) return res.status(400).json({ error: 'name + config required' })
+  const id = saveTemplate(name, config)
+  res.json({ id })
+})
+app.get('/api/dashboard/templates/:id', auth, (req, res) => {
+  const cfg = getTemplate(parseInt(req.params.id))
+  if (!cfg) return res.status(404).json({ error: 'not found' })
+  res.json({ config: cfg })
+})
+app.delete('/api/dashboard/templates/:id', auth, (req, res) => {
+  removeTemplate(parseInt(req.params.id))
+  res.json({ ok: true })
+})
+
+// =============================================================================
+// FASE D — ROTAS PUBLICAS (link publico sem login, escopadas por slug)
+// =============================================================================
+
+// Middleware: resolve slug -> accountId + config, sem exigir auth
+function publicResolve(req, res, next) {
+  const { slug } = req.params
+  const found = getConfigBySlug(slug)
+  if (!found) return res.status(404).json({ error: 'link publico nao encontrado' })
+  req.publicAccountId = found.account_id
+  req.publicConfig = found.config
+  next()
+}
+
+// Info + config do dashboard publico
+app.get('/api/public/dashboard/:slug', publicResolve, (req, res) => {
+  // Puxa nome da conta Meta se disponivel (best effort)
+  res.json({
+    account_id: req.publicAccountId,
+    config: req.publicConfig,
+    last_update: getAccountLatestUpdate(req.publicAccountId),
+  })
+})
+
+// Insights compare (public)
+app.get('/api/public/dashboard/:slug/insights/compare', publicResolve, (req, res) => {
+  try {
+    const accountId = req.publicAccountId
+    const { days = '30', level = 'account', since, until } = req.query
+    const current = resolveDateRange(days, since, until)
+    const previous = calcPreviousRange(current)
+    const currentData = level === 'campaign'
+      ? agg.getCampaignInsights(accountId, current.since, current.until)
+      : agg.getAccountInsights(accountId, current.since, current.until)
+    const previousData = level === 'campaign'
+      ? agg.getCampaignInsights(accountId, previous.since, previous.until)
+      : agg.getAccountInsights(accountId, previous.since, previous.until)
+    res.json({ current: currentData, previous: previousData, ranges: { current, previous } })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/public/dashboard/:slug/insights/daily-compare', publicResolve, (req, res) => {
+  try {
+    const accountId = req.publicAccountId
+    const { days = '30', since, until } = req.query
+    const current = resolveDateRange(days, since, until)
+    const previous = calcPreviousRange(current)
+    res.json({
+      current: agg.getDailyAccountInsights(accountId, current.since, current.until),
+      previous: agg.getDailyAccountInsights(accountId, previous.since, previous.until),
+      ranges: { current, previous },
+    })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/public/dashboard/:slug/top-ads', publicResolve, (req, res) => {
+  try {
+    const accountId = req.publicAccountId
+    const { days = '30', since, until } = req.query
+    const range = resolveDateRange(days, since, until)
+    const ads = agg.getAllAdsWithCreatives(accountId)
+    const insights = agg.getAllAdInsights(accountId, range.since, range.until)
+    const insightsMap = new Map(insights.map(i => [i.ad_id, i]))
+    const data = ads.map(ad => ({ ...ad, insight: insightsMap.get(ad.id) || null }))
+      .filter(ad => ad.insight && parseFloat(ad.insight.spend || '0') > 0)
+    res.json({ data, ranges: { current: range } })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/public/dashboard/:slug/campaigns', publicResolve, (req, res) => {
+  try {
+    res.json({ data: agg.getCampaigns(req.publicAccountId) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/public/dashboard/:slug/campaigns/:campaignId/adsets', publicResolve, (req, res) => {
+  try {
+    const accountId = req.publicAccountId
+    const { days = '30', since, until } = req.query
+    const range = resolveDateRange(days, since, until)
+    const adsets = agg.getAdsets(accountId, req.params.campaignId)
+    const insights = agg.getAdsetInsightsByCampaign(accountId, req.params.campaignId, range.since, range.until)
+    const map = new Map(insights.map(i => [i.adset_id, i]))
+    res.json({ data: adsets.map(a => ({ ...a, insight: map.get(a.id) || null })) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+app.get('/api/public/dashboard/:slug/adsets/:adsetId/ads', publicResolve, (req, res) => {
+  try {
+    const accountId = req.publicAccountId
+    const { days = '30', since, until } = req.query
+    const range = resolveDateRange(days, since, until)
+    const ads = agg.getAdsWithCreatives(accountId, req.params.adsetId)
+    const insights = agg.getAdInsightsByAdset(accountId, req.params.adsetId, range.since, range.until)
+    const map = new Map(insights.map(i => [i.ad_id, i]))
+    res.json({ data: ads.map(ad => ({ ...ad, insight: map.get(ad.id) || null })) })
+  } catch (err) { res.status(500).json({ error: err.message }) }
+})
+
+// =============================================================================
+// CRON — snapshot diario 04:00 de todas as contas Meta
+// =============================================================================
+async function runNightlySnapshot() {
+  console.log('[Snapshot cron] iniciando...')
+  try {
+    // Descobrir todas as contas Meta do token
+    let accounts = []
+    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status&limit=200&access_token=${META_TOKEN}`
+    while (url) {
+      const resp = await fetch(url)
+      const data = await resp.json()
+      if (data.error) throw new Error(data.error.message)
+      accounts.push(...(data.data || []))
+      url = data.paging?.next || null
+    }
+    console.log(`[Snapshot cron] ${accounts.length} contas Meta encontradas`)
+    const result = await syncAllAccounts(accounts, META_TOKEN, 2)
+    console.log(`[Snapshot cron] concluido: ok=${result.ok} err=${result.err}`)
+  } catch (err) {
+    console.error('[Snapshot cron] falhou:', err.message)
+  }
+}
+
+// 04:00 America/Sao_Paulo todo dia
+cron.schedule('0 4 * * *', runNightlySnapshot, { timezone: 'America/Sao_Paulo' })
+console.log('[Snapshot cron] agendado pra 04:00 America/Sao_Paulo diariamente')
+
+// Endpoint pra rodar sync geral manual (admin only)
+app.post('/api/meta/sync-all', auth, async (_req, res) => {
+  try {
+    let accounts = []
+    let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status&limit=200&access_token=${META_TOKEN}`
+    while (url) {
+      const resp = await fetch(url)
+      const data = await resp.json()
+      if (data.error) throw new Error(data.error.message)
+      accounts.push(...(data.data || []))
+      url = data.paging?.next || null
+    }
+    const result = await syncAllAccounts(accounts, META_TOKEN, 2)
+    res.json({ ok: true, accounts: accounts.length, ...result })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 const server = app.listen(PORT, () => {
   console.log(`[Dros Dashboard API] Running on http://localhost:${PORT}`)

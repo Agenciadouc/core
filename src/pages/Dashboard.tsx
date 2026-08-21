@@ -21,7 +21,9 @@ import KiwifyView from '../components/KiwifyView'
 import GoogleAdsView from '../components/GoogleAdsView'
 import AnalyticsView from '../components/AnalyticsView'
 import OverviewView from '../components/OverviewView'
-import { Search, LogOut, BarChart3, Instagram, LineChart, LayoutDashboard, Calendar, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { Search, LogOut, BarChart3, Instagram, LineChart, LayoutDashboard, Calendar, ChevronsLeft, ChevronsRight, Settings2, RefreshCw, Share2, Check, Copy, Link as LinkIcon, X, Eye } from 'lucide-react'
+import { fetchDashboardConfig, saveDashboardConfig as saveConfigApi, publishDashboard, unpublishDashboard, syncAccountNow, getAccountSyncStatus, DEFAULT_CONFIG, type DashboardConfig } from '../lib/dashboardConfig'
+import MetricPicker from '../components/MetricPicker'
 
 const DATE_OPTIONS = [
   { label: '7 dias', value: '7d' },
@@ -49,6 +51,15 @@ export default function Dashboard() {
   const [loadingData, setLoadingData] = useState(false)
   const [search, setSearch] = useState('')
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+
+  // Personalizacao (Fase A/B/C/D)
+  const [config, setConfig] = useState<DashboardConfig>(DEFAULT_CONFIG)
+  const [editing, setEditing] = useState(false)
+  const [savingCfg, setSavingCfg] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [lastSyncAt, setLastSyncAt] = useState<string | null>(null)
+  const [publicSlug, setPublicSlug] = useState<string | null>(null)
+  const [showShareModal, setShowShareModal] = useState(false)
   // Embed mode: query params ?account=NOME&embed=1 (usado quando este painel e carregado dentro de um iframe do /hub)
   const urlParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams()
   const embedMode = urlParams.get('embed') === '1'
@@ -109,7 +120,86 @@ export default function Dashboard() {
   // Reset tab when switching accounts
   useEffect(() => {
     setClientTab('overview')
+    setEditing(false)
   }, [selectedAccount])
+
+  // Load config quando muda de conta
+  useEffect(() => {
+    if (!selectedAccount) return
+    let cancel = false
+    fetchDashboardConfig(selectedAccount.id)
+      .then(res => { if (!cancel) { setConfig(res.config); setPublicSlug(res.public_slug) } })
+      .catch(() => { if (!cancel) { setConfig(DEFAULT_CONFIG); setPublicSlug(null) } })
+    getAccountSyncStatus(selectedAccount.id)
+      .then(s => { if (!cancel) setLastSyncAt(s.last_update) })
+      .catch(() => {})
+    return () => { cancel = true }
+  }, [selectedAccount])
+
+  const patchConfig = (patch: Partial<DashboardConfig>) => setConfig(prev => ({ ...prev, ...patch }))
+
+  const handleSaveConfig = async () => {
+    if (!selectedAccount) return
+    setSavingCfg(true)
+    try {
+      await saveConfigApi(selectedAccount.id, config)
+      setEditing(false)
+    } catch (e) { console.error(e); alert('Erro ao salvar personalizacao') }
+    setSavingCfg(false)
+  }
+
+  const handleSync = async () => {
+    if (!selectedAccount) return
+    setSyncing(true)
+    try {
+      await syncAccountNow(selectedAccount.id)
+      const s = await getAccountSyncStatus(selectedAccount.id)
+      setLastSyncAt(s.last_update)
+      // recarrega dados
+      const days = getEffectiveDays()
+      const since = datePeriod === 'custom' ? customDateFrom : undefined
+      const until = datePeriod === 'custom' ? customDateTo : undefined
+      const [acct, camp, daily] = await Promise.all([
+        fetchCompare(selectedAccount.id, days, 'account', since, until).catch(() => null),
+        fetchCompare(selectedAccount.id, days, 'campaign', since, until).catch(() => null),
+        fetchDailyCompare(selectedAccount.id, days, since, until).catch(() => null),
+      ])
+      setCompareData(acct); setCampaignCompare(camp); setDailyCompare(daily); setLastUpdate(new Date())
+    } catch (e) { console.error(e); alert('Erro ao sincronizar') }
+    setSyncing(false)
+  }
+
+  const handlePublish = async () => {
+    if (!selectedAccount) return
+    try {
+      const slug = await publishDashboard(selectedAccount.id)
+      setPublicSlug(slug)
+      setShowShareModal(true)
+    } catch (e) { alert('Erro ao publicar') }
+  }
+
+  const handleUnpublish = async () => {
+    if (!selectedAccount) return
+    try {
+      await unpublishDashboard(selectedAccount.id)
+      setPublicSlug(null)
+      setShowShareModal(false)
+    } catch (e) { alert('Erro ao remover publicacao') }
+  }
+
+  const publicUrl = publicSlug ? `${window.location.origin}/core/public/${publicSlug}` : null
+
+  // Helper: formata "coletado ha Xh" a partir do last_update (ISO)
+  const formatSyncAgo = (isoOrDatetime: string | null) => {
+    if (!isoOrDatetime) return 'nunca'
+    const t = new Date(isoOrDatetime.replace(' ', 'T') + 'Z').getTime()
+    const diffMin = Math.round((Date.now() - t) / 60000)
+    if (diffMin < 60) return `ha ${diffMin} min`
+    const diffH = Math.round(diffMin / 60)
+    if (diffH < 48) return `ha ${diffH}h`
+    const diffD = Math.round(diffH / 24)
+    return `ha ${diffD}d`
+  }
 
   const filteredAccounts = accounts.filter((a) =>
     a.name.toLowerCase().includes(search.toLowerCase())
@@ -212,76 +302,167 @@ export default function Dashboard() {
             {/* Tab: Meta Ads */}
             {clientTab === 'ads' && (
               <>
+                {/* Barra de acoes: coletado ha X + botoes Personalizar/Sincronizar/Publicar */}
+                <div className="ads-toolbar">
+                  <div className="ads-toolbar-meta">
+                    <span className="meta-source">Meta Ads</span>
+                    <span className="meta-sep">·</span>
+                    <span className="meta-collected">coletado {formatSyncAgo(lastSyncAt)}</span>
+                  </div>
+                  <div className="ads-toolbar-actions">
+                    {editing ? (
+                      <>
+                        <button className="btn-tool btn-tool-primary" onClick={handleSaveConfig} disabled={savingCfg}>
+                          <Check size={13} /> {savingCfg ? 'Salvando...' : 'Concluir edicao'}
+                        </button>
+                        <button className="btn-tool btn-tool-ghost" onClick={() => { setEditing(false); fetchDashboardConfig(selectedAccount.id).then(r => setConfig(r.config)) }}>
+                          <X size={13} /> Cancelar
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn-tool" onClick={() => setEditing(true)}>
+                          <Settings2 size={13} /> Personalizar
+                        </button>
+                        <button className="btn-tool" onClick={handleSync} disabled={syncing}>
+                          <RefreshCw size={13} className={syncing ? 'spin' : ''} /> {syncing ? 'Sincronizando...' : 'Sincronizar'}
+                        </button>
+                        <button className="btn-tool" onClick={() => publicSlug ? setShowShareModal(true) : handlePublish()}>
+                          {publicSlug ? <><LinkIcon size={13} /> Link publico</> : <><Share2 size={13} /> Publicar</>}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </div>
+
                 {loadingData ? (
                   <div className="loading-container"><div className="spinner" /><span>Carregando dados...</span></div>
                 ) : !current ? (
                   <div className="empty-state">
                     <div className="icon">📭</div>
                     <h3>Sem dados no periodo</h3>
-                    <p>Nenhum dado encontrado para os ultimos {getEffectiveDays()} dias.</p>
+                    <p>Nenhum dado encontrado para os ultimos {getEffectiveDays()} dias. Talvez precise clicar em <b>Sincronizar</b>.</p>
                   </div>
                 ) : (
                   <>
-                    <section className="dash-section">
-                      <MetricCards current={current} previous={previous} />
+                    {/* CARDS DE METRICAS */}
+                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
+                      {editing && (
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Cartoes de metricas</span>
+                          <MetricPicker label="Metricas dos cartoes" selected={config.cards} onChange={v => patchConfig({ cards: v })} />
+                        </div>
+                      )}
+                      <MetricCards current={current} previous={previous} cards={config.cards} />
                     </section>
 
-                    <section className="dash-section">
-                      <div className="section-title">Desempenho no Periodo</div>
-                      <div className="charts-grid">
-                        <div className="chart-card">
-                          {selectedAccount.name.toLowerCase().includes('sameco') ? (
-                            <>
-                              <h3>Leads</h3>
-                              <SpendChart currentData={dailyCompare?.current || []} previousData={dailyCompare?.previous || []} dataKey="leads" label="Leads" />
-                            </>
-                          ) : (
-                            <>
-                              <h3>Conversas Iniciadas</h3>
-                              <SpendChart currentData={dailyCompare?.current || []} previousData={dailyCompare?.previous || []} dataKey="messaging" label="Conversas" />
-                            </>
-                          )}
+                    {/* GRAFICO DIARIO */}
+                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
+                      {editing && (
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Grafico diario</span>
+                          <MetricPicker label="Metricas do grafico" selected={config.chartAvailableMetrics} onChange={v => patchConfig({ chartAvailableMetrics: v })} />
+                          <MetricPicker label={`Default: ${config.chartDefaultMetric}`} selected={[config.chartDefaultMetric]} onChange={v => patchConfig({ chartDefaultMetric: v[0] || 'spend' })} singleSelect allowedKeys={config.chartAvailableMetrics} />
                         </div>
-                        <div className="chart-card">
-                          <h3>Funil de Conversao</h3>
-                          <FunnelChart insight={current} />
-                        </div>
-                      </div>
-                      <div className="charts-grid">
-                        <div className="chart-card full-width">
-                          <h3>Valor Investido</h3>
-                          <SpendChart currentData={dailyCompare?.current || []} previousData={dailyCompare?.previous || []} dataKey="spend" label="Investimento" />
-                        </div>
+                      )}
+                      <div className="chart-card">
+                        <SpendChart
+                          currentData={dailyCompare?.current || []}
+                          previousData={dailyCompare?.previous || []}
+                          defaultMetric={config.chartDefaultMetric}
+                          availableMetrics={config.chartAvailableMetrics}
+                        />
                       </div>
                     </section>
 
-                    <section className="dash-section">
-                      <div className="section-title">Campanhas</div>
-                      <CampaignTree
-                        currentCampaigns={campaignCompare?.current || []}
-                        previousCampaigns={campaignCompare?.previous || []}
-                        days={getEffectiveDays()}
-                        since={showCustomDates && customDateFrom ? customDateFrom : undefined}
-                        until={showCustomDates && customDateTo ? customDateTo : undefined}
-                      />
+                    {/* FUNIL */}
+                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
+                      {editing && (
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Funil</span>
+                          <MetricPicker label="Etapas do funil" selected={config.funnel} onChange={v => patchConfig({ funnel: v })} />
+                        </div>
+                      )}
+                      <div className="chart-card">
+                        <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, letterSpacing: '.02em' }}>Funil</h3>
+                        <FunnelChart insight={current} steps={config.funnel} />
+                      </div>
                     </section>
 
-                    <section className="dash-section">
-                      <div className="section-title">Top Criativos</div>
-                      <TopCreatives
-                        accountId={selectedAccount.id}
-                        days={getEffectiveDays()}
-                        since={showCustomDates && customDateFrom ? customDateFrom : undefined}
-                        until={showCustomDates && customDateTo ? customDateTo : undefined}
-                      />
+                    {/* CAMPANHAS */}
+                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
+                      {editing && (
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Campanhas e anuncios</span>
+                          <MetricPicker label="Colunas" selected={config.table} onChange={v => patchConfig({ table: v })} />
+                        </div>
+                      )}
+                      <div className="table-card">
+                        <div className="table-header"><h3>Campanhas</h3><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>Clique numa campanha pra ver conjuntos + anuncios</span></div>
+                        <CampaignTree
+                          currentCampaigns={campaignCompare?.current || []}
+                          previousCampaigns={campaignCompare?.previous || []}
+                          days={getEffectiveDays()}
+                          since={showCustomDates && customDateFrom ? customDateFrom : undefined}
+                          until={showCustomDates && customDateTo ? customDateTo : undefined}
+                          columns={config.table}
+                        />
+                      </div>
+                    </section>
+
+                    {/* TOP CRIATIVOS */}
+                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
+                      {editing && (
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Top criativos</span>
+                          <MetricPicker label={`Sort default: ${config.topCreativesSort}`} selected={[config.topCreativesSort]} onChange={v => patchConfig({ topCreativesSort: v[0] || 'spend' })} singleSelect />
+                        </div>
+                      )}
+                      <div className="table-card">
+                        <div className="table-header"><h3>Top Criativos</h3><span style={{ color: 'var(--text-muted)', fontSize: 12 }}>6 melhores do periodo</span></div>
+                        <TopCreatives
+                          accountId={selectedAccount.id}
+                          days={getEffectiveDays()}
+                          since={showCustomDates && customDateFrom ? customDateFrom : undefined}
+                          until={showCustomDates && customDateTo ? customDateTo : undefined}
+                          defaultSort={config.topCreativesSort}
+                        />
+                      </div>
                     </section>
 
                     <CRMView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} adSpend={current ? parseFloat(current.spend) : undefined} />
-
                     <KiwifyView accountName={selectedAccount.name} days={getEffectiveDays()} adSpend={current ? parseFloat(current.spend) : undefined} />
                   </>
                 )}
               </>
+            )}
+
+            {/* Modal de compartilhamento (link publico) */}
+            {showShareModal && (
+              <div className="share-modal-overlay" onClick={() => setShowShareModal(false)}>
+                <div className="share-modal" onClick={e => e.stopPropagation()}>
+                  <div className="share-modal-header">
+                    <h3><LinkIcon size={16} /> Link publico do dashboard</h3>
+                    <button className="btn-close" onClick={() => setShowShareModal(false)}><X size={16} /></button>
+                  </div>
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13, marginBottom: 14 }}>
+                    Compartilhe este link com o cliente. Ele ve o dashboard sem precisar de login,
+                    com todas as personalizacoes que voce salvou.
+                  </p>
+                  {publicUrl && (
+                    <div className="share-link-box">
+                      <code>{publicUrl}</code>
+                      <button className="btn-tool" onClick={() => { navigator.clipboard.writeText(publicUrl); alert('Link copiado!') }}>
+                        <Copy size={13} /> Copiar
+                      </button>
+                      <a className="btn-tool" href={publicUrl} target="_blank" rel="noreferrer"><Eye size={13} /> Abrir</a>
+                    </div>
+                  )}
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
+                    <button className="btn-tool btn-tool-ghost" onClick={handleUnpublish}>Despublicar</button>
+                  </div>
+                </div>
+              </div>
             )}
 
             {/* Tab: Instagram */}

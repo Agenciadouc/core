@@ -1,63 +1,47 @@
-import { getAction, formatNumber, type MetaInsight } from '../lib/api'
+// Funil configuravel — recebe lista ordenada de metric-keys.
+
+import { type MetaInsight } from '../lib/api'
+import { getMetric } from '../lib/metricsCatalog'
 
 interface Props {
   insight: MetaInsight
+  steps: string[]  // metric-keys em ordem
 }
 
-const FUNNEL_COLORS = [
-  { bg: '#FF6B8A', text: '#fff' },
-  { bg: '#FFAA83', text: '#fff' },
-  { bg: '#9B59B6', text: '#fff' },
-  { bg: '#5DADE2', text: '#fff' },
-  { bg: '#34C759', text: '#fff' },
-  { bg: '#FFB300', text: '#fff' },
-]
-
-export default function FunnelChart({ insight }: Props) {
-  const impressions = parseInt(insight.impressions)
-  const reach = parseInt(insight.reach)
-  const clicks = parseInt(insight.clicks)
-  const linkClicks = getAction(insight.actions, 'link_click')
-  const leads = getAction(insight.actions, 'lead') || getAction(insight.actions, 'onsite_conversion.lead_grouped')
-  const messaging = getAction(insight.actions, 'onsite_conversion.messaging_conversation_started_7d')
-  const purchases = getAction(insight.actions, 'purchase')
-
-  const steps: { label: string; value: number }[] = [
-    { label: 'Impressoes', value: impressions },
-    { label: 'Alcance', value: reach },
-    { label: 'Cliques (todos)', value: clicks },
-    { label: 'Cliques no link', value: linkClicks },
-  ]
-
-  if (purchases > 0) steps.push({ label: 'Vendas', value: purchases })
-  else if (leads > 0 || messaging > 0) {
-    const total = leads + messaging
-    steps.push({ label: leads > 0 && messaging > 0 ? 'Leads + Conversas' : leads > 0 ? 'Leads' : 'Conversas', value: total })
+export default function FunnelChart({ insight, steps: stepKeys }: Props) {
+  if (!stepKeys?.length) {
+    return <div style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Nenhuma etapa configurada</div>
   }
 
-  const filtered = steps.filter((s) => s.value > 0)
-  if (filtered.length < 2) return <div style={{ color: '#6B6580', padding: 40, textAlign: 'center' }}>Dados insuficientes</div>
+  const steps = stepKeys.map(key => {
+    const def = getMetric(key)
+    if (!def) return null
+    return { key, label: def.label, value: def.extract(insight), format: def.format }
+  }).filter(Boolean) as { key: string; label: string; value: number; format: (v: number) => string }[]
 
-  const maxWidth = 100
-  const minWidth = 28
-  const widthStep = filtered.length > 1 ? (maxWidth - minWidth) / (filtered.length - 1) : 0
+  if (steps.length < 2) return <div style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Dados insuficientes ou etapas invalidas</div>
+
+  const maxVal = Math.max(...steps.map(s => s.value))
+  if (maxVal === 0) return <div style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Sem dados no periodo</div>
 
   return (
-    <div className="funnel-container">
-      {filtered.map((step, i) => {
-        const width = maxWidth - widthStep * i
-        const color = FUNNEL_COLORS[i % FUNNEL_COLORS.length]
-        const convRate = i > 0 && filtered[i - 1].value > 0
-          ? ((step.value / filtered[i - 1].value) * 100).toFixed(1) + '%'
-          : null
+    <div className="funnel-container-h">
+      {steps.map((step, i) => {
+        const widthPct = maxVal > 0 ? (step.value / maxVal) * 100 : 0
+        const prev = i > 0 ? steps[i - 1] : null
+        const convRate = prev && prev.value > 0 ? (step.value / prev.value) * 100 : null
 
         return (
-          <div key={step.label} className="funnel-tier" style={{ width: `${width}%` }}>
-            <div className="funnel-tier-bar" style={{ background: color.bg }}>
-              <div className="funnel-tier-label">{step.label}</div>
-              <div className="funnel-tier-value">{formatNumber(step.value)}</div>
+          <div key={step.key} className="funnel-row">
+            <div className="funnel-row-label">{step.label}</div>
+            <div className="funnel-row-track">
+              <div className="funnel-row-bar" style={{ width: `${Math.max(widthPct, 3)}%` }}>
+                <span className="funnel-row-value">{step.format(step.value)}</span>
+              </div>
             </div>
-            {convRate && <div className="funnel-tier-rate">{convRate}</div>}
+            <div className="funnel-row-rate">
+              {convRate !== null && <span>{convRate.toFixed(1)}%</span>}
+            </div>
           </div>
         )
       })}

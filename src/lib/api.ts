@@ -86,14 +86,17 @@ export async function fetchAccounts(): Promise<MetaAccount[]> {
   return data.accounts
 }
 
-export async function fetchCompare(accountId: string, days = 30, level = 'account', since?: string, until?: string): Promise<CompareResponse> {
-  let url = `/api/meta/accounts/${accountId}/insights/compare?days=${days}&level=${level}`
+// USA CACHE por padrao (rapido, dados ate ontem 23:59). Passar useCache=false pra bater na API Meta ao vivo.
+export async function fetchCompare(accountId: string, days = 30, level = 'account', since?: string, until?: string, useCache = true): Promise<CompareResponse> {
+  const base = useCache ? '/api/meta/cached/accounts' : '/api/meta/accounts'
+  let url = `${base}/${accountId}/insights/compare?days=${days}&level=${level}`
   if (since && until) url += `&since=${since}&until=${until}`
   return apiFetch<CompareResponse>(url)
 }
 
-export async function fetchDailyCompare(accountId: string, days = 30, since?: string, until?: string): Promise<DailyCompareResponse> {
-  let url = `/api/meta/accounts/${accountId}/insights/daily-compare?days=${days}`
+export async function fetchDailyCompare(accountId: string, days = 30, since?: string, until?: string, useCache = true): Promise<DailyCompareResponse> {
+  const base = useCache ? '/api/meta/cached/accounts' : '/api/meta/accounts'
+  let url = `${base}/${accountId}/insights/daily-compare?days=${days}`
   if (since && until) url += `&since=${since}&until=${until}`
   return apiFetch<DailyCompareResponse>(url)
 }
@@ -139,16 +142,20 @@ export type AdPreviewFormat =
   | 'INSTAGRAM_STORY'
   | 'INSTAGRAM_REELS'
 
-export async function fetchAdsets(campaignId: string, days = 30, since?: string, until?: string): Promise<MetaAdset[]> {
-  let url = `/api/meta/campaigns/${campaignId}/adsets?days=${days}`
+export async function fetchAdsets(campaignId: string, days = 30, since?: string, until?: string, accountId?: string, useCache = true): Promise<MetaAdset[]> {
+  const base = useCache ? '/api/meta/cached/campaigns' : '/api/meta/campaigns'
+  let url = `${base}/${campaignId}/adsets?days=${days}`
   if (since && until) url += `&since=${since}&until=${until}`
+  if (accountId) url += `&accountId=${accountId}`
   const data = await apiFetch<{ data: MetaAdset[] }>(url)
   return data.data || []
 }
 
-export async function fetchAds(adsetId: string, days = 30, since?: string, until?: string): Promise<MetaAd[]> {
-  let url = `/api/meta/adsets/${adsetId}/ads?days=${days}`
+export async function fetchAds(adsetId: string, days = 30, since?: string, until?: string, accountId?: string, useCache = true): Promise<MetaAd[]> {
+  const base = useCache ? '/api/meta/cached/adsets' : '/api/meta/adsets'
+  let url = `${base}/${adsetId}/ads?days=${days}`
   if (since && until) url += `&since=${since}&until=${until}`
+  if (accountId) url += `&accountId=${accountId}`
   const data = await apiFetch<{ data: MetaAd[] }>(url)
   return data.data || []
 }
@@ -170,8 +177,9 @@ export interface MetaTopAd {
   insight: MetaInsight | null
 }
 
-export async function fetchTopAds(accountId: string, days = 30, since?: string, until?: string, limit = 200): Promise<MetaTopAd[]> {
-  let url = `/api/meta/accounts/${accountId}/top-ads?days=${days}&limit=${limit}`
+export async function fetchTopAds(accountId: string, days = 30, since?: string, until?: string, _limit = 200, useCache = true): Promise<MetaTopAd[]> {
+  const base = useCache ? '/api/meta/cached/accounts' : '/api/meta/accounts'
+  let url = `${base}/${accountId}/top-ads?days=${days}`
   if (since && until) url += `&since=${since}&until=${until}`
   const data = await apiFetch<{ data: MetaTopAd[] }>(url)
   return data.data || []
