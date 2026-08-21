@@ -98,6 +98,66 @@ export async function fetchDailyCompare(accountId: string, days = 30, since?: st
   return apiFetch<DailyCompareResponse>(url)
 }
 
+// ---------- Adsets / Ads / Preview (arvore de campanhas) ----------
+
+export interface MetaAdset {
+  id: string
+  name: string
+  status?: string
+  effective_status?: string
+  daily_budget?: string
+  lifetime_budget?: string
+  optimization_goal?: string
+  insight: MetaInsight | null
+}
+
+export interface MetaCreative {
+  id?: string
+  name?: string
+  thumbnail_url?: string
+  image_url?: string
+  video_id?: string
+  effective_object_story_id?: string
+  body?: string
+  title?: string
+  call_to_action_type?: string
+}
+
+export interface MetaAd {
+  id: string
+  name: string
+  status?: string
+  effective_status?: string
+  creative?: MetaCreative
+  insight: MetaInsight | null
+}
+
+export type AdPreviewFormat =
+  | 'DESKTOP_FEED_STANDARD'
+  | 'MOBILE_FEED_STANDARD'
+  | 'INSTAGRAM_STANDARD'
+  | 'INSTAGRAM_STORY'
+  | 'INSTAGRAM_REELS'
+
+export async function fetchAdsets(campaignId: string, days = 30, since?: string, until?: string): Promise<MetaAdset[]> {
+  let url = `/api/meta/campaigns/${campaignId}/adsets?days=${days}`
+  if (since && until) url += `&since=${since}&until=${until}`
+  const data = await apiFetch<{ data: MetaAdset[] }>(url)
+  return data.data || []
+}
+
+export async function fetchAds(adsetId: string, days = 30, since?: string, until?: string): Promise<MetaAd[]> {
+  let url = `/api/meta/adsets/${adsetId}/ads?days=${days}`
+  if (since && until) url += `&since=${since}&until=${until}`
+  const data = await apiFetch<{ data: MetaAd[] }>(url)
+  return data.data || []
+}
+
+export async function fetchAdPreview(adId: string, format: AdPreviewFormat = 'DESKTOP_FEED_STANDARD'): Promise<string> {
+  const data = await apiFetch<{ html: string }>(`/api/meta/ads/${adId}/preview?format=${format}`)
+  return data.html || ''
+}
+
 // Helper to extract action value
 export function getAction(actions: MetaAction[] | undefined, type: string): number {
   const a = actions?.find((x) => x.action_type === type)

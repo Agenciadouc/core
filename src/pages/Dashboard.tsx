@@ -12,7 +12,7 @@ import {
 import Sidebar from '../components/Sidebar'
 import MetricCards from '../components/MetricCards'
 import SpendChart from '../components/SpendChart'
-import CampaignTable from '../components/CampaignTable'
+import CampaignTree from '../components/CampaignTree'
 import FunnelChart from '../components/FunnelChart'
 import InstagramView from '../components/InstagramView'
 import CRMView from '../components/CRMView'
@@ -256,7 +256,13 @@ export default function Dashboard() {
 
                     <section className="dash-section">
                       <div className="section-title">Campanhas</div>
-                      <CampaignTable currentCampaigns={campaignCompare?.current || []} previousCampaigns={campaignCompare?.previous || []} />
+                      <CampaignTree
+                        currentCampaigns={campaignCompare?.current || []}
+                        previousCampaigns={campaignCompare?.previous || []}
+                        days={getEffectiveDays()}
+                        since={showCustomDates && customDateFrom ? customDateFrom : undefined}
+                        until={showCustomDates && customDateTo ? customDateTo : undefined}
+                      />
                     </section>
 
                     <CRMView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} adSpend={current ? parseFloat(current.spend) : undefined} />

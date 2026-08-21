@@ -1461,6 +1461,75 @@ app.get('/api/meta/accounts/:accountId/campaigns', auth, async (req, res) => {
   }
 })
 
+// Adsets of a campaign — com insights do periodo (spend, actions, etc)
+app.get('/api/meta/campaigns/:campaignId/adsets', auth, async (req, res) => {
+  try {
+    const { campaignId } = req.params
+    const { days = '30', since, until } = req.query
+    const ranges = getDateRanges(parseInt(days), since, until)
+
+    const insightsField = `insights.time_range(${JSON.stringify(ranges.current)}){spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type}`
+
+    const data = await metaFetch(`/${campaignId}/adsets`, {
+      fields: `id,name,status,effective_status,daily_budget,lifetime_budget,optimization_goal,billing_event,targeting,${insightsField}`,
+      limit: '100',
+    })
+
+    // Flatten insights[0] into adset itself
+    const adsets = (data.data || []).map(a => ({
+      ...a,
+      insight: (a.insights && a.insights.data && a.insights.data[0]) || null,
+      insights: undefined,
+    }))
+
+    res.json({ data: adsets, ranges })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Ads of an adset — com insights + creative (thumbnail)
+app.get('/api/meta/adsets/:adsetId/ads', auth, async (req, res) => {
+  try {
+    const { adsetId } = req.params
+    const { days = '30', since, until } = req.query
+    const ranges = getDateRanges(parseInt(days), since, until)
+
+    const insightsField = `insights.time_range(${JSON.stringify(ranges.current)}){spend,impressions,clicks,ctr,cpc,cpm,reach,frequency,actions,cost_per_action_type}`
+    const creativeField = 'creative{id,name,thumbnail_url,image_url,video_id,effective_object_story_id,object_story_spec,body,title,call_to_action_type}'
+
+    const data = await metaFetch(`/${adsetId}/ads`, {
+      fields: `id,name,status,effective_status,${creativeField},${insightsField}`,
+      limit: '100',
+    })
+
+    const ads = (data.data || []).map(a => ({
+      ...a,
+      insight: (a.insights && a.insights.data && a.insights.data[0]) || null,
+      insights: undefined,
+    }))
+
+    res.json({ data: ads, ranges })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Preview HTML de um ad — retorna iframe pronto do Meta
+// Formatos: DESKTOP_FEED_STANDARD, MOBILE_FEED_STANDARD, INSTAGRAM_STANDARD, INSTAGRAM_STORY, INSTAGRAM_REELS
+app.get('/api/meta/ads/:adId/preview', auth, async (req, res) => {
+  try {
+    const { adId } = req.params
+    const format = req.query.format || 'DESKTOP_FEED_STANDARD'
+
+    const data = await metaFetch(`/${adId}/previews`, { ad_format: format })
+    const html = (data.data && data.data[0] && data.data[0].body) || ''
+    res.json({ html, format })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // =============================================
 // GOOGLE ADS API
 // =============================================
