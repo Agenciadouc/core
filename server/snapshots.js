@@ -9,6 +9,8 @@ import {
 const META_BASE = 'https://graph.facebook.com/v21.0'
 
 const TIMEOUT_MS = 45000  // 45s por chamada Meta — se estourar, aborta e propaga erro
+const ASYNC_POLL_TIMEOUT_MS = 300000  // 5 min max de polling do async job
+const ASYNC_POLL_INTERVAL_MS = 3000   // poll a cada 3s
 
 async function fetchWithTimeout(url) {
   const ctrl = new AbortController()
@@ -32,6 +34,56 @@ async function metaFetch(path, params, token) {
   const data = await resp.json()
   if (data.error) throw new Error(data.error.message || 'Meta API error')
   return data
+}
+
+/**
+ * Async Insights Job — recomendado pela Meta pra queries pesadas (level=ad, ranges longos).
+ * Cria job → poll ate completar → busca resultado paginado.
+ * https://developers.facebook.com/docs/marketing-api/insights/best-practices/
+ */
+async function metaAsyncInsights(accountId, params, token, maxPages = 30) {
+  // 1. Cria job
+  const createUrl = new URL(`${META_BASE}/${accountId}/insights`)
+  createUrl.searchParams.set('access_token', token)
+  for (const [k, v] of Object.entries(params || {})) createUrl.searchParams.set(k, v)
+  const createResp = await fetchWithTimeout(createUrl.toString())
+  const createData = await createResp.json()
+  if (createData.error) throw new Error('async create: ' + createData.error.message)
+  const runId = createData.report_run_id
+  if (!runId) throw new Error('async create: sem report_run_id na resposta')
+
+  // 2. Poll ate completar
+  const deadline = Date.now() + ASYNC_POLL_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    await new Promise(r => setTimeout(r, ASYNC_POLL_INTERVAL_MS))
+    const statusUrl = `${META_BASE}/${runId}?access_token=${token}`
+    const statusResp = await fetchWithTimeout(statusUrl)
+    const status = await statusResp.json()
+    if (status.error) throw new Error('async poll: ' + status.error.message)
+    if (status.async_status === 'Job Completed') break
+    if (status.async_status === 'Job Failed' || status.async_status === 'Job Skipped') {
+      throw new Error('async job failed: ' + JSON.stringify(status))
+    }
+    // continua polling
+  }
+
+  // 3. Busca resultado paginado (usa metaFetchAll normal, sem access_token no path)
+  const resultUrl = new URL(`${META_BASE}/${runId}/insights`)
+  resultUrl.searchParams.set('access_token', token)
+  resultUrl.searchParams.set('limit', '500')
+
+  const all = []
+  let url = resultUrl.toString()
+  let pages = 0
+  while (url && pages < maxPages) {
+    const resp = await fetchWithTimeout(url)
+    const data = await resp.json()
+    if (data.error) throw new Error('async result: ' + data.error.message)
+    if (data.data) all.push(...data.data)
+    url = data.paging?.next || null
+    pages++
+  }
+  return all
 }
 
 // Pagina automatica seguindo o cursor "next". Se paginas > maxPages, para.
@@ -74,17 +126,27 @@ export async function snapshotRangeForAccount(accountId, token, since, until) {
   const timeRange = JSON.stringify({ since, until })
   const levels = ['account', 'campaign', 'adset', 'ad']
 
-  // Paraleliza as 4 chamadas (uma por level) com Promise.allSettled
+  // Calcula quantos dias — se > 14, level=ad usa async job (Meta recomenda)
+  const daysDiff = Math.ceil((new Date(until) - new Date(since)) / 86400000) + 1
+  const adUseAsync = daysDiff > 14
+
   const levelPromises = levels.map(level => {
     const fields = level === 'account' ? insightsFields
                  : level === 'campaign' ? `campaign_id,campaign_name,${insightsFields}`
                  : level === 'adset'    ? `campaign_id,campaign_name,adset_id,adset_name,${insightsFields}`
                                         : `campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,${insightsFields}`
-    return metaFetchAll(`/${accountId}/insights`, {
+    const params = {
       fields, time_range: timeRange, level,
-      time_increment: '1',  // <<< CHAVE: retorna 1 registro por dia
+      time_increment: '1',
       limit: '500',
-    }, token, 30).then(data => ({ level, data }))
+    }
+    // level=ad em range longo usa async job (evita timeout sync)
+    if (level === 'ad' && adUseAsync) {
+      return metaAsyncInsights(accountId, params, token, 60)
+        .then(data => ({ level, data }))
+    }
+    return metaFetchAll(`/${accountId}/insights`, params, token, 30)
+      .then(data => ({ level, data }))
   })
 
   const settled = await Promise.allSettled(levelPromises)
@@ -106,7 +168,11 @@ export async function snapshotRangeForAccount(accountId, token, since, until) {
     for (const [d, rows] of byDate.entries()) {
       saveSnapshot(accountId, d, level, rows)
     }
-    results[level] = { records: data.length, days: byDate.size }
+    results[level] = {
+      records: data.length,
+      days: byDate.size,
+      async: level === 'ad' && adUseAsync,
+    }
   }
   return results
 }

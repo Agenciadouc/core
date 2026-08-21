@@ -106,8 +106,9 @@ async function main() {
   let okAccounts = 0, errAccounts = 0
   const errorLog = []
 
-  // Processa 3 contas em paralelo (respeita rate limit Business Use Case da Meta)
-  const CONCURRENCY = 3
+  // Processa 2 contas em paralelo (async job + estrutura em paralelo = 8 chamadas simultaneas)
+  // Rate limit ads_insights standard: 190k + 400*active_ads por hora. 2x contas = confortavel.
+  const CONCURRENCY = 2
   const today = new Date()
   const end = new Date(today); end.setDate(end.getDate() - 1)
   const start = new Date(end); start.setDate(start.getDate() - daysBack + 1)
