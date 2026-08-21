@@ -72,78 +72,92 @@ export async function snapshotDayForAccount(accountId, token, date) {
 export async function snapshotRangeForAccount(accountId, token, since, until) {
   const insightsFields = 'spend,impressions,clicks,ctr,reach,frequency,actions,action_values'
   const timeRange = JSON.stringify({ since, until })
+  const levels = ['account', 'campaign', 'adset', 'ad']
 
-  const results = {}
-  for (const level of ['account', 'campaign', 'adset', 'ad']) {
+  // Paraleliza as 4 chamadas (uma por level) com Promise.allSettled
+  const levelPromises = levels.map(level => {
     const fields = level === 'account' ? insightsFields
                  : level === 'campaign' ? `campaign_id,campaign_name,${insightsFields}`
                  : level === 'adset'    ? `campaign_id,campaign_name,adset_id,adset_name,${insightsFields}`
                                         : `campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,${insightsFields}`
-    try {
-      const data = await metaFetchAll(`/${accountId}/insights`, {
-        fields, time_range: timeRange, level,
-        time_increment: '1',   // <<< CHAVE: retorna 1 registro por dia por entidade
-        limit: '500',
-      }, token, 30)  // Ate 30 paginas = 15000 registros (500 x 30)
+    return metaFetchAll(`/${accountId}/insights`, {
+      fields, time_range: timeRange, level,
+      time_increment: '1',  // <<< CHAVE: retorna 1 registro por dia
+      limit: '500',
+    }, token, 30).then(data => ({ level, data }))
+  })
 
-      // Agrupa os N registros por dia (date_start) e salva um snapshot por dia
-      const byDate = new Map()
-      for (const r of data) {
-        const d = r.date_start
-        if (!byDate.has(d)) byDate.set(d, [])
-        byDate.get(d).push(r)
-      }
-      for (const [d, rows] of byDate.entries()) {
-        saveSnapshot(accountId, d, level, rows)
-      }
-      results[level] = { records: data.length, days: byDate.size }
-    } catch (err) {
-      results[level] = { error: err.message }
+  const settled = await Promise.allSettled(levelPromises)
+  const results = {}
+  for (let i = 0; i < settled.length; i++) {
+    const r = settled[i]
+    const level = levels[i]
+    if (r.status === 'rejected') {
+      results[level] = { error: r.reason?.message || String(r.reason) }
+      continue
     }
+    const data = r.value.data
+    const byDate = new Map()
+    for (const row of data) {
+      const d = row.date_start
+      if (!byDate.has(d)) byDate.set(d, [])
+      byDate.get(d).push(row)
+    }
+    for (const [d, rows] of byDate.entries()) {
+      saveSnapshot(accountId, d, level, rows)
+    }
+    results[level] = { records: data.length, days: byDate.size }
   }
   return results
 }
 
 /**
  * Atualiza estrutura (campaigns + adsets) e cache de criativos.
- * Roda 1x por conta por dia, junto com o snapshot do dia anterior.
+ * OTIMIZADO: 3 chamadas totais por conta (nao mais 180 uma por campanha):
+ *   1. /act_X/campaigns (todas)
+ *   2. /act_X/adsets   (todos, com campaign_id incluso pra vincular)
+ *   3. /act_X/ads      (todos, com creative aninhado)
+ * As 3 chamadas rodam EM PARALELO com Promise.allSettled.
+ * Filter status: nao processa ARCHIVED (economiza 30-70% do payload em contas antigas).
  */
 export async function updateStructureAndCreatives(accountId, token) {
   const errors = []
+  const notArchivedFilter = JSON.stringify([{ field: 'effective_status', operator: 'IN', value: ['ACTIVE','PAUSED','ADSET_PAUSED','CAMPAIGN_PAUSED','WITH_ISSUES','PENDING_REVIEW','DISAPPROVED','IN_PROCESS'] }])
 
-  // Campanhas
-  try {
-    const campaigns = await metaFetchAll(`/${accountId}/campaigns`, {
+  const [campaignsRes, adsetsRes, adsRes] = await Promise.allSettled([
+    metaFetchAll(`/${accountId}/campaigns`, {
       fields: 'id,name,status,effective_status,objective,daily_budget,lifetime_budget',
+      filtering: notArchivedFilter,
       limit: '200',
-    }, token)
-    for (const c of campaigns) saveCampaignStructure(accountId, c)
+    }, token, 10),
+    metaFetchAll(`/${accountId}/adsets`, {
+      fields: 'id,name,status,effective_status,campaign_id,daily_budget,lifetime_budget',
+      filtering: notArchivedFilter,
+      limit: '200',
+    }, token, 15),
+    metaFetchAll(`/${accountId}/ads`, {
+      fields: 'id,name,effective_status,campaign_id,adset_id,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id}',
+      filtering: notArchivedFilter,
+      limit: '100',
+    }, token, 30),
+  ])
 
-    // Adsets de cada campanha
-    for (const c of campaigns) {
-      try {
-        const adsets = await metaFetchAll(`/${c.id}/adsets`, {
-          fields: 'id,name,status,effective_status,daily_budget,lifetime_budget',
-          limit: '200',
-        }, token)
-        for (const a of adsets) saveAdsetStructure(accountId, c.id, a)
-      } catch (e) {
-        errors.push(`adsets ${c.id}: ${e.message}`)
-      }
-    }
-  } catch (e) {
-    errors.push(`campaigns: ${e.message}`)
+  if (campaignsRes.status === 'fulfilled') {
+    for (const c of campaignsRes.value) saveCampaignStructure(accountId, c)
+  } else {
+    errors.push(`campaigns: ${campaignsRes.reason?.message || campaignsRes.reason}`)
   }
 
-  // Ads com creative (thumbnail) — campos minimos pra ficar leve
-  try {
-    const ads = await metaFetchAll(`/${accountId}/ads`, {
-      fields: 'id,name,effective_status,campaign_id,adset_id,creative{id,thumbnail_url,image_url,video_id,effective_object_story_id}',
-      limit: '50',   // paginas menores = respostas mais rapidas por request
-    }, token, 30)   // ate 30 paginas = 1500 ads maximos por conta
-    for (const ad of ads) saveCreative(accountId, ad)
-  } catch (e) {
-    errors.push(`ads: ${e.message}`)
+  if (adsetsRes.status === 'fulfilled') {
+    for (const a of adsetsRes.value) saveAdsetStructure(accountId, a.campaign_id || null, a)
+  } else {
+    errors.push(`adsets: ${adsetsRes.reason?.message || adsetsRes.reason}`)
+  }
+
+  if (adsRes.status === 'fulfilled') {
+    for (const ad of adsRes.value) saveCreative(accountId, ad)
+  } else {
+    errors.push(`ads: ${adsRes.reason?.message || adsRes.reason}`)
   }
 
   return errors

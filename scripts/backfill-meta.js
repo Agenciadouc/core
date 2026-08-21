@@ -106,52 +106,65 @@ async function main() {
   let okAccounts = 0, errAccounts = 0
   const errorLog = []
 
-  for (let ai = 0; ai < accounts.length; ai++) {
-    const acc = accounts[ai]
-    const t0 = Date.now()
-    console.log(`\n[${ai + 1}/${accounts.length}] ${acc.name} (${acc.id})`)
+  // Processa 3 contas em paralelo (respeita rate limit Business Use Case da Meta)
+  const CONCURRENCY = 3
+  const today = new Date()
+  const end = new Date(today); end.setDate(end.getDate() - 1)
+  const start = new Date(end); start.setDate(start.getDate() - daysBack + 1)
+  const sinceStr = fmtDate(start), untilStr = fmtDate(end)
 
-    // Atualiza estrutura (campanhas/adsets/criativos) 1x por conta
-    process.stdout.write('  estrutura...')
-    try {
-      const structErrs = await updateStructureAndCreatives(acc.id, META_TOKEN)
-      if (structErrs.length) process.stdout.write(` ${structErrs.length} avisos`)
-      process.stdout.write(' ok\n')
-    } catch (e) {
-      process.stdout.write(` erro: ${e.message.substring(0, 80)}\n`)
-      errorLog.push(`${acc.name}: estrutura ${e.message}`)
+  async function processAccount(acc, index) {
+    const t0 = Date.now()
+    const prefix = `[${index + 1}/${accounts.length}] ${acc.name.substring(0, 30)}`
+
+    // Estrutura + snapshots em paralelo
+    const [structResult, snapResult] = await Promise.allSettled([
+      updateStructureAndCreatives(acc.id, META_TOKEN),
+      snapshotRangeForAccount(acc.id, META_TOKEN, sinceStr, untilStr),
+    ])
+
+    const parts = []
+    let hasError = false
+
+    if (structResult.status === 'fulfilled') {
+      const errs = structResult.value
+      parts.push(`estrut:${errs.length ? `${errs.length}av` : 'ok'}`)
+      if (errs.length) errorLog.push(`${acc.name} struct: ${errs[0]}`)
+    } else {
+      parts.push('estrut:ERR')
+      hasError = true
+      errorLog.push(`${acc.name} struct: ${structResult.reason?.message || structResult.reason}`)
     }
 
-    // Snapshots do range inteiro em 4 chamadas Meta (1 por level), usando time_increment=1
-    process.stdout.write('  snapshots: ')
-    const today = new Date()
-    const end = new Date(today); end.setDate(end.getDate() - 1)
-    const start = new Date(end); start.setDate(start.getDate() - daysBack + 1)
-    let totalRecords = 0, hasError = false
-    try {
-      const results = await snapshotRangeForAccount(acc.id, META_TOKEN, fmtDate(start), fmtDate(end))
-      for (const [level, r] of Object.entries(results)) {
+    if (snapResult.status === 'fulfilled') {
+      let totalDays = 0, totalRecs = 0
+      for (const [level, r] of Object.entries(snapResult.value)) {
         if (r.error) {
+          parts.push(`${level[0]}!`)
           hasError = true
-          process.stdout.write(`${level[0]}!`)
           errorLog.push(`${acc.name} ${level}: ${r.error}`.substring(0, 200))
         } else {
-          totalRecords += r.records || 0
-          process.stdout.write(`${level[0]}${r.days || 0}`)
+          totalDays = Math.max(totalDays, r.days || 0)
+          totalRecs += r.records || 0
         }
       }
-    } catch (e) {
+      parts.push(`${totalDays}d/${totalRecs}reg`)
+    } else {
+      parts.push('snap:ERR')
       hasError = true
-      errorLog.push(`${acc.name} range: ${e.message}`.substring(0, 200))
+      errorLog.push(`${acc.name} snap: ${snapResult.reason?.message || snapResult.reason}`)
     }
+
     const elapsed = Math.round((Date.now() - t0) / 1000)
-    console.log(` ${totalRecords} registros em ${elapsed}s`)
+    console.log(`${prefix.padEnd(45)} ${parts.join(' ')} ${elapsed}s`)
+    return !hasError
+  }
 
-    if (!hasError) okAccounts++
-    else errAccounts++
-
-    // Pausa 1s entre contas pra dar folga no rate limit Meta
-    if (ai < accounts.length - 1) await new Promise(r => setTimeout(r, 1000))
+  // Rodar em batches de CONCURRENCY paralelas
+  for (let i = 0; i < accounts.length; i += CONCURRENCY) {
+    const batch = accounts.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(batch.map((acc, j) => processAccount(acc, i + j)))
+    for (const ok of results) { if (ok) okAccounts++; else errAccounts++ }
   }
 
   endRun(runId, okAccounts, errAccounts, errorLog.join('\n').substring(0, 4000))
