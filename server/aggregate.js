@@ -104,22 +104,102 @@ export function getDailyAccountInsights(accountId, since, until) {
   return snaps.flatMap(s => s.data.map(d => ({ ...d, date_start: s.date, date_stop: s.date })))
 }
 
-// ============ ESTRUTURA + CRIATIVOS (do cache) ============
+// ============ ESTRUTURA + CRIATIVOS (do cache, com fallback aos snapshots) ============
+
+// Extrai entidades unicas dos snapshots quando structure_cache/creatives_cache tao vazios
+// (evita mostrar "Sem conjuntos" quando ha dados de insights mas nao rodou updateStructure)
+function uniqueFromSnapshots(accountId, level, groupField, nameField, parentFields = {}) {
+  const rows = flatSnapshots(accountId, level, '2020-01-01', '2099-12-31')
+  const map = new Map()
+  for (const r of rows) {
+    const id = r[groupField]
+    if (!id) continue
+    if (!map.has(id)) {
+      const entry = {
+        id,
+        name: r[nameField] || '(sem nome)',
+        status: null,
+        effective_status: null,
+      }
+      for (const [k, sourceKey] of Object.entries(parentFields)) {
+        entry[k] = r[sourceKey] || null
+      }
+      map.set(id, entry)
+    }
+  }
+  return Array.from(map.values())
+}
 
 export function getCampaigns(accountId) {
-  return getCachedCampaigns(accountId)
+  const cached = getCachedCampaigns(accountId)
+  if (cached.length > 0) return cached
+  // Fallback: extrai de snapshots level=campaign
+  return uniqueFromSnapshots(accountId, 'campaign', 'campaign_id', 'campaign_name')
 }
 
 export function getAdsets(accountId, campaignId) {
-  return getCachedAdsets(accountId, campaignId)
+  const cached = getCachedAdsets(accountId, campaignId)
+  if (cached.length > 0) return cached
+  // Fallback: adsets do snapshot level=adset filtrado pelo campaign_id
+  const rows = flatSnapshots(accountId, 'adset', '2020-01-01', '2099-12-31')
+    .filter(r => r.campaign_id === campaignId)
+  const map = new Map()
+  for (const r of rows) {
+    if (!r.adset_id) continue
+    if (!map.has(r.adset_id)) {
+      map.set(r.adset_id, {
+        id: r.adset_id,
+        name: r.adset_name || '(sem nome)',
+        status: null,
+        effective_status: null,
+        campaign_id: r.campaign_id,
+      })
+    }
+  }
+  return Array.from(map.values())
 }
 
 export function getAdsWithCreatives(accountId, adsetId) {
-  return getCreativesByAdset(accountId, adsetId)
+  const cached = getCreativesByAdset(accountId, adsetId)
+  if (cached.length > 0) return cached
+  // Fallback: ads do snapshot level=ad filtrado pelo adset_id, sem thumbnail
+  const rows = flatSnapshots(accountId, 'ad', '2020-01-01', '2099-12-31')
+    .filter(r => r.adset_id === adsetId)
+  const map = new Map()
+  for (const r of rows) {
+    if (!r.ad_id) continue
+    if (!map.has(r.ad_id)) {
+      map.set(r.ad_id, {
+        id: r.ad_id,
+        name: r.ad_name || '(sem nome)',
+        effective_status: null,
+        creative: {},   // sem thumbnail (precisa rodar updateStructure pra popular)
+      })
+    }
+  }
+  return Array.from(map.values())
 }
 
 export function getAllAdsWithCreatives(accountId) {
-  return getCreativesByAccount(accountId)
+  const cached = getCreativesByAccount(accountId)
+  if (cached.length > 0) return cached
+  // Fallback: todos ads do snapshot level=ad
+  const rows = flatSnapshots(accountId, 'ad', '2020-01-01', '2099-12-31')
+  const map = new Map()
+  for (const r of rows) {
+    if (!r.ad_id) continue
+    if (!map.has(r.ad_id)) {
+      map.set(r.ad_id, {
+        id: r.ad_id,
+        name: r.ad_name || '(sem nome)',
+        campaign_id: r.campaign_id,
+        adset_id: r.adset_id,
+        effective_status: null,
+        creative: {},
+      })
+    }
+  }
+  return Array.from(map.values())
 }
 
 // ============ META INFO ============
