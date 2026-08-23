@@ -1,4 +1,4 @@
-// Funil configuravel — recebe lista ordenada de metric-keys.
+// Funil configuravel — visual barras horizontais coloridas (estilo antigo).
 
 import { type MetaInsight } from '../lib/api'
 import { getMetric } from '../lib/metricsCatalog'
@@ -7,6 +7,16 @@ interface Props {
   insight: MetaInsight
   steps: string[]  // metric-keys em ordem
 }
+
+// Paleta de cores por posicao no funil (mais quentes no topo, frios no meio, verde no fim)
+const FUNNEL_COLORS = [
+  { bg: 'linear-gradient(90deg, #FF6B8A 0%, #FF5378 100%)', fg: '#fff' },  // rosa
+  { bg: 'linear-gradient(90deg, #FFAA83 0%, #FF9066 100%)', fg: '#fff' },  // laranja claro
+  { bg: 'linear-gradient(90deg, #9B59B6 0%, #8548A3 100%)', fg: '#fff' },  // roxo
+  { bg: 'linear-gradient(90deg, #5DADE2 0%, #3F97CE 100%)', fg: '#fff' },  // azul
+  { bg: 'linear-gradient(90deg, #34C759 0%, #22A946 100%)', fg: '#fff' },  // verde
+  { bg: 'linear-gradient(90deg, #FFB300 0%, #E69C00 100%)', fg: '#fff' },  // amarelo
+]
 
 export default function FunnelChart({ insight, steps: stepKeys }: Props) {
   if (!stepKeys?.length) {
@@ -24,24 +34,33 @@ export default function FunnelChart({ insight, steps: stepKeys }: Props) {
   const maxVal = Math.max(...steps.map(s => s.value))
   if (maxVal === 0) return <div style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Sem dados no periodo</div>
 
+  // Larguras decrescem proporcionalmente ao valor (com um piso pra nao ficar invisivel)
+  const MIN_WIDTH_PCT = 28
+  const MAX_WIDTH_PCT = 100
+
   return (
-    <div className="funnel-container-h">
+    <div className="funnel-classic">
       {steps.map((step, i) => {
-        const widthPct = maxVal > 0 ? (step.value / maxVal) * 100 : 0
+        const color = FUNNEL_COLORS[i % FUNNEL_COLORS.length]
+        // Largura visual proporcional ao valor (mas nunca abaixo do MIN)
+        const ratio = maxVal > 0 ? step.value / maxVal : 0
+        const width = MIN_WIDTH_PCT + (MAX_WIDTH_PCT - MIN_WIDTH_PCT) * ratio
+
+        // Taxa de conversao vs etapa anterior
         const prev = i > 0 ? steps[i - 1] : null
         const convRate = prev && prev.value > 0 ? (step.value / prev.value) * 100 : null
 
         return (
-          <div key={step.key} className="funnel-row">
-            <div className="funnel-row-label">{step.label}</div>
-            <div className="funnel-row-track">
-              <div className="funnel-row-bar" style={{ width: `${Math.max(widthPct, 3)}%` }}>
-                <span className="funnel-row-value">{step.format(step.value)}</span>
+          <div key={step.key} className="funnel-classic-row">
+            <div className="funnel-classic-bar-wrapper" style={{ width: `${width}%` }}>
+              <div className="funnel-classic-bar" style={{ background: color.bg, color: color.fg }}>
+                <div className="funnel-classic-label">{step.label}</div>
+                <div className="funnel-classic-value">{step.format(step.value)}</div>
               </div>
             </div>
-            <div className="funnel-row-rate">
-              {convRate !== null && <span>{convRate.toFixed(1)}%</span>}
-            </div>
+            {convRate !== null && (
+              <div className="funnel-classic-rate">{convRate.toFixed(1)}%</div>
+            )}
           </div>
         )
       })}
