@@ -80,7 +80,16 @@ export function getAccountInsights(accountId, since, until) {
 
 export function getCampaignInsights(accountId, since, until) {
   const rows = flatSnapshots(accountId, 'campaign', since, until)
-  return aggregateInsights(rows, 'campaign_id')
+  const insights = aggregateInsights(rows, 'campaign_id')
+  // Enriquece com effective_status do structure cache (pra badge ATIVA/PAUSADA)
+  const structure = getCachedCampaigns(accountId)
+  const statusMap = new Map(structure.map(c => [c.id, c.effective_status]))
+  for (const ins of insights) {
+    if (ins.campaign_id && statusMap.has(ins.campaign_id)) {
+      ins.effective_status = statusMap.get(ins.campaign_id)
+    }
+  }
+  return insights
 }
 
 export function getAdsetInsightsByCampaign(accountId, campaignId, since, until) {

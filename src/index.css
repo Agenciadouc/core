@@ -796,17 +796,21 @@ a { color: inherit; text-decoration: none; }
 .metric-card .metric-sub .positive { color: var(--positive); font-weight: 700; }
 .metric-card .metric-sub .negative { color: var(--negative); font-weight: 700; }
 
-/* ===== FUNIL CLASSICO (barras horizontais grossas coloridas) ===== */
+/* ===== FUNIL CLASSICO (barras horizontais grossas coloridas + CENTRALIZADAS) ===== */
 .funnel-classic {
   display: flex; flex-direction: column; gap: 14px;
   padding: 12px 4px;
 }
 .funnel-classic-row {
-  display: flex; align-items: center; gap: 12px;
+  display: grid;
+  grid-template-columns: 1fr 55px;
+  align-items: center;
+  gap: 12px;
 }
 .funnel-classic-bar-wrapper {
   transition: width .35s ease;
   min-width: 100px;
+  margin: 0 auto;   /* CENTRALIZA a barra dentro da coluna 1fr — forma funil */
 }
 .funnel-classic-bar {
   border-radius: 8px;
@@ -832,12 +836,15 @@ a { color: inherit; text-decoration: none; }
   font-variant-numeric: tabular-nums;
 }
 
-/* ===== SPEND CHART tabs em cima (barras roxas) ===== */
+/* ===== SPEND CHART tabs em cima + toggle bar/line ===== */
 .spend-chart { padding: 12px 4px; }
+.spend-chart-header {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; padding: 0 0 14px;
+}
 .spend-chart-tabs {
-  display: flex; gap: 4px; flex-wrap: wrap;
-  padding: 0 0 14px; overflow-x: auto;
-  scrollbar-width: thin;
+  display: flex; gap: 4px; flex-wrap: wrap; flex: 1;
+  overflow-x: auto; scrollbar-width: thin;
 }
 .spend-chart-tab {
   padding: 6px 12px; border-radius: 100px;
@@ -848,8 +855,25 @@ a { color: inherit; text-decoration: none; }
 }
 .spend-chart-tab:hover { color: var(--text-primary); background: var(--bg-secondary); }
 .spend-chart-tab.active {
-  color: #7C3AED; background: rgba(124, 58, 237, 0.12);
-  border-color: rgba(124, 58, 237, 0.28);
+  color: #22C55E; background: rgba(34, 197, 94, 0.12);
+  border-color: rgba(34, 197, 94, 0.30);
+}
+.spend-chart-mode {
+  display: flex; gap: 2px;
+  background: var(--bg-secondary);
+  border-radius: 8px; padding: 3px;
+  flex-shrink: 0;
+}
+.spend-mode-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 10px; border-radius: 6px;
+  background: transparent; color: var(--text-muted);
+  border: none; cursor: pointer;
+  transition: all .15s;
+}
+.spend-mode-btn:hover { color: var(--text-primary); }
+.spend-mode-btn.active {
+  background: rgba(34, 197, 94, 0.15); color: #22C55E;
 }
 
 /* ===== CAMPAIGN TREE HORIZONTAL (novo) ===== */
