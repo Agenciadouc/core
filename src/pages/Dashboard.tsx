@@ -419,6 +419,7 @@ export default function Dashboard() {
                           since={showCustomDates && customDateFrom ? customDateFrom : undefined}
                           until={showCustomDates && customDateTo ? customDateTo : undefined}
                           columns={config.table}
+                          accountId={selectedAccount.id}
                         />
                       </div>
                     </section>

@@ -17,6 +17,7 @@ interface Props {
   since?: string
   until?: string
   columns: string[]  // metric-keys das colunas
+  accountId: string  // OBRIGATORIO — endpoint cached precisa disso pra filtrar
 }
 
 // -------------------- Status badge (ATIVA / PAUSADA / COM ERRO) --------------------
@@ -210,12 +211,10 @@ function PreviewModal({ adId, adName, onClose }: { adId: string; adName: string;
 }
 
 // -------------------- Main --------------------
-export default function CampaignTree({ currentCampaigns, days, since, until, columns }: Props) {
+export default function CampaignTree({ currentCampaigns, days, since, until, columns, accountId }: Props) {
   const [preview, setPreview] = useState<{ id: string; name: string } | null>(null)
 
   if (!currentCampaigns.length) return <div style={{ padding: 20, color: 'var(--text-muted)' }}>Nenhuma campanha no periodo.</div>
-
-  const accountId = ((currentCampaigns[0] as any).account_id) || (currentCampaigns[0].campaign_id?.split('_')[0]) || ''
 
   const sorted = [...currentCampaigns].sort((a, b) => parseFloat(b.spend) - parseFloat(a.spend))
 
