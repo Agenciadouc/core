@@ -3395,12 +3395,65 @@ app.get('/api/public/dashboard/:slug/adsets/:adsetId/ads', publicResolve, (req, 
 })
 
 // =============================================================================
-// CRON — snapshot diario 04:00 de todas as contas Meta
+// CRON — snapshot diario 04:00 + warmup cache de TODAS as APIs por cliente
 // =============================================================================
+
+// Warmup: chama endpoints Google Ads/IG/GA4/Overview pra cada cliente do Hub
+// pra popular cache HTTP. Roda depois do snapshot Meta.
+// So os endpoints "core" que a maioria das aba abre — nao inclui keywords/search-terms
+// que sao secundarios.
+async function warmupCacheForClient(client, adminToken) {
+  const jobs = []
+  const days = 30  // range mais comum que o dashboard abre
+
+  // Overview (agrega tudo — chamada mais critica)
+  if (client.name) {
+    jobs.push(fetch(`http://localhost:${PORT}/api/overview/${encodeURIComponent(client.core_meta_account_id || client.name)}?days=${days}&accountName=${encodeURIComponent(client.name)}&refresh=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }).catch(() => null))
+  }
+
+  // Google Ads (se configurado)
+  if (client.core_gads_customer_id) {
+    const cid = client.core_gads_customer_id.replace(/-/g, '')
+    const endpoints = ['campaigns', 'daily', 'conversions']  // essenciais pro dashboard
+    for (const ep of endpoints) {
+      jobs.push(fetch(`http://localhost:${PORT}/api/google-ads/${cid}/${ep}?days=${days}&refresh=1`, {
+        headers: { Authorization: `Bearer ${adminToken}` },
+      }).catch(() => null))
+    }
+  }
+
+  // Instagram (se configurado)
+  if (client.core_ig_page_id) {
+    const ig = client.core_ig_page_id
+    jobs.push(fetch(`http://localhost:${PORT}/api/instagram/${ig}/profile?refresh=1`, { headers: { Authorization: `Bearer ${adminToken}` } }).catch(() => null))
+    jobs.push(fetch(`http://localhost:${PORT}/api/instagram/${ig}/insights?days=${days}&refresh=1`, { headers: { Authorization: `Bearer ${adminToken}` } }).catch(() => null))
+    jobs.push(fetch(`http://localhost:${PORT}/api/instagram/${ig}/media?limit=24&refresh=1`, { headers: { Authorization: `Bearer ${adminToken}` } }).catch(() => null))
+  }
+
+  // GA4 (se configurado)
+  if (client.core_ga4_property_id) {
+    jobs.push(fetch(`http://localhost:${PORT}/api/analytics/${client.core_ga4_property_id}/report?days=${days}&refresh=1`, {
+      headers: { Authorization: `Bearer ${adminToken}` },
+    }).catch(() => null))
+  }
+
+  await Promise.allSettled(jobs)
+  return jobs.length
+}
+
+// Gera JWT admin pra chamar os proprios endpoints internamente
+function generateAdminToken() {
+  return jwt.sign({ id: 'cron', email: 'cron@internal', name: 'Cron', role: 'admin' }, JWT_SECRET, { expiresIn: '1h' })
+}
+
 async function runNightlySnapshot() {
-  console.log('[Snapshot cron] iniciando...')
+  console.log('[Snapshot cron] === iniciando ciclo noturno ===')
+  const startTime = Date.now()
+
+  // Fase 1: snapshot Meta Ads (SQLite estruturado, dados diarios granulares)
   try {
-    // Descobrir todas as contas Meta do token
     let accounts = []
     let url = `${META_BASE}/me/adaccounts?fields=id,name,account_status&limit=200&access_token=${META_TOKEN}`
     while (url) {
@@ -3410,17 +3463,63 @@ async function runNightlySnapshot() {
       accounts.push(...(data.data || []))
       url = data.paging?.next || null
     }
-    console.log(`[Snapshot cron] ${accounts.length} contas Meta encontradas`)
+    console.log(`[Snapshot cron] Meta: ${accounts.length} contas encontradas`)
     const result = await syncAllAccounts(accounts, META_TOKEN, 2)
-    console.log(`[Snapshot cron] concluido: ok=${result.ok} err=${result.err}`)
+    console.log(`[Snapshot cron] Meta concluido: ok=${result.ok} err=${result.err}`)
   } catch (err) {
-    console.error('[Snapshot cron] falhou:', err.message)
+    console.error('[Snapshot cron] Meta falhou:', err.message)
   }
+
+  // Fase 2: warmup cache HTTP das outras APIs (Google Ads / IG / GA4 / Overview)
+  // Roda pra cada cliente do Hub em batches de 2 (respeitar rate limits)
+  try {
+    await syncFromHub()  // garantir HUB_CLIENTS atualizado
+    const activeClients = HUB_CLIENTS.filter(c => c.core_meta_account_id || c.core_gads_customer_id || c.core_ig_page_id || c.core_ga4_property_id)
+    console.log(`[Snapshot cron] Warmup cache: ${activeClients.length} clientes ativos`)
+    const adminToken = generateAdminToken()
+
+    const BATCH = 2
+    let warmed = 0
+    for (let i = 0; i < activeClients.length; i += BATCH) {
+      const batch = activeClients.slice(i, i + BATCH)
+      const results = await Promise.allSettled(batch.map(c => warmupCacheForClient(c, adminToken)))
+      warmed += results.filter(r => r.status === 'fulfilled').length
+      // Pausa 2s entre batches pra dar folga aos APIs
+      if (i + BATCH < activeClients.length) await new Promise(r => setTimeout(r, 2000))
+    }
+    console.log(`[Snapshot cron] Warmup concluido: ${warmed}/${activeClients.length} clientes`)
+  } catch (err) {
+    console.error('[Snapshot cron] Warmup falhou:', err.message)
+  }
+
+  const totalSec = Math.round((Date.now() - startTime) / 1000)
+  console.log(`[Snapshot cron] === ciclo completo em ${totalSec}s ===`)
 }
 
 // 04:00 America/Sao_Paulo todo dia
 cron.schedule('0 4 * * *', runNightlySnapshot, { timezone: 'America/Sao_Paulo' })
 console.log('[Snapshot cron] agendado pra 04:00 America/Sao_Paulo diariamente')
+
+// Endpoint pra rodar warmup manual do cache (util pra testar sem esperar 4am)
+// Popula cache HTTP de todos os clientes ativos do Hub
+app.post('/api/cache/warmup', auth, async (_req, res) => {
+  try {
+    await syncFromHub()
+    const activeClients = HUB_CLIENTS.filter(c => c.core_meta_account_id || c.core_gads_customer_id || c.core_ig_page_id || c.core_ga4_property_id)
+    const adminToken = generateAdminToken()
+    const t0 = Date.now()
+    const BATCH = 2
+    let done = 0
+    for (let i = 0; i < activeClients.length; i += BATCH) {
+      const batch = activeClients.slice(i, i + BATCH)
+      const results = await Promise.allSettled(batch.map(c => warmupCacheForClient(c, adminToken)))
+      done += results.filter(r => r.status === 'fulfilled').length
+    }
+    res.json({ ok: true, clients_warmed: done, total: activeClients.length, seconds: Math.round((Date.now() - t0) / 1000) })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
 
 // Endpoint pra rodar sync geral manual (admin only)
 app.post('/api/meta/sync-all', auth, async (_req, res) => {
