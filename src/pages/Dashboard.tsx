@@ -22,7 +22,7 @@ import GoogleAdsView from '../components/GoogleAdsView'
 import AnalyticsView from '../components/AnalyticsView'
 import OverviewView from '../components/OverviewView'
 import { Search, LogOut, BarChart3, Instagram, LineChart, LayoutDashboard, Calendar, ChevronsLeft, ChevronsRight, Settings2, RefreshCw, Share2, Check, Copy, Link as LinkIcon, X, Eye } from 'lucide-react'
-import { fetchDashboardConfig, saveDashboardConfig as saveConfigApi, publishDashboard, unpublishDashboard, syncAccountNow, getAccountSyncStatus, refreshHub, DEFAULT_CONFIG, type DashboardConfig } from '../lib/dashboardConfig'
+import { fetchDashboardConfig, saveDashboardConfig as saveConfigApi, publishDashboard, unpublishDashboard, syncAccountNow, getAccountSyncStatus, refreshHub, clearApiCache, DEFAULT_CONFIG, type DashboardConfig } from '../lib/dashboardConfig'
 import MetricPicker from '../components/MetricPicker'
 
 const DATE_OPTIONS = [
@@ -152,10 +152,13 @@ export default function Dashboard() {
     if (!selectedAccount) return
     setSyncing(true)
     try {
-      await syncAccountNow(selectedAccount.id)
+      // Sync Meta ads + limpa cache HTTP das outras APIs
+      await Promise.all([
+        syncAccountNow(selectedAccount.id),
+        clearApiCache('all'),  // limpa google-ads/instagram/analytics/overview cache
+      ])
       const s = await getAccountSyncStatus(selectedAccount.id)
       setLastSyncAt(s.last_update)
-      // recarrega dados
       const days = getEffectiveDays()
       const since = datePeriod === 'custom' ? customDateFrom : undefined
       const until = datePeriod === 'custom' ? customDateTo : undefined
@@ -368,6 +371,41 @@ export default function Dashboard() {
                       )}
                       <MetricCards current={current} previous={previous} cards={config.cards} />
                     </section>
+
+                    {/* CONFIG CONVERSOES META (modo edicao apenas) */}
+                    {editing && current?.actions && current.actions.length > 0 && (
+                      <section className="dash-section is-editing">
+                        <div className="section-editor-bar">
+                          <span className="section-chip">Conversoes Meta desse cliente</span>
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>marque os eventos que contam como "conversao" no Overview</span>
+                        </div>
+                        <div style={{ padding: 14, background: 'var(--bg-secondary)', borderRadius: 10, display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                          {[...new Set(current.actions.map((a: any) => a.action_type))].sort().map((action_type: string) => {
+                            const value = current.actions.find((a: any) => a.action_type === action_type)?.value
+                            const isSelected = (config.metaConversionActions || []).includes(action_type)
+                            return (
+                              <button
+                                key={action_type}
+                                onClick={() => {
+                                  const cur = config.metaConversionActions || []
+                                  patchConfig({ metaConversionActions: isSelected ? cur.filter(a => a !== action_type) : [...cur, action_type] })
+                                }}
+                                style={{
+                                  padding: '6px 12px', borderRadius: 6,
+                                  background: isSelected ? 'rgba(52,199,89,0.15)' : 'var(--bg-card)',
+                                  color: isSelected ? '#34C759' : 'var(--text-secondary)',
+                                  border: `1px solid ${isSelected ? 'rgba(52,199,89,0.35)' : 'var(--border-subtle)'}`,
+                                  fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                                  fontFamily: 'ui-monospace, monospace',
+                                }}
+                              >
+                                {isSelected ? '✓ ' : ''}{action_type} <span style={{ opacity: 0.6 }}>({value})</span>
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </section>
+                    )}
 
                     {/* GRAFICO DIARIO */}
                     <section className={`dash-section ${editing ? 'is-editing' : ''}`}>

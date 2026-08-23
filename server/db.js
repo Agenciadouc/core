@@ -78,6 +78,58 @@ db.exec(`
     config_json    TEXT NOT NULL,
     created_at     TEXT NOT NULL DEFAULT (datetime('now'))
   );
+
+  -- Google Ads snapshots (por dia por customer, com data_json arrays)
+  CREATE TABLE IF NOT EXISTS gads_snapshots (
+    customer_id    TEXT NOT NULL,     -- ID sem hifens
+    snapshot_date  TEXT NOT NULL,
+    kind           TEXT NOT NULL,     -- 'account' | 'campaign' | 'keyword' | 'device' | 'hourly' | 'conversion'
+    data_json      TEXT NOT NULL,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (customer_id, snapshot_date, kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_gads_snap ON gads_snapshots(customer_id, snapshot_date DESC);
+
+  -- Instagram snapshots (diario por ig_id)
+  CREATE TABLE IF NOT EXISTS ig_snapshots (
+    ig_id          TEXT NOT NULL,
+    snapshot_date  TEXT NOT NULL,
+    kind           TEXT NOT NULL,     -- 'profile' | 'daily_insights' | 'audience'
+    data_json      TEXT NOT NULL,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (ig_id, snapshot_date, kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ig_snap ON ig_snapshots(ig_id, snapshot_date DESC);
+
+  CREATE TABLE IF NOT EXISTS ig_media_cache (
+    ig_id          TEXT NOT NULL,
+    media_id       TEXT NOT NULL,
+    media_json     TEXT NOT NULL,     -- caption, media_type, thumbnail_url, permalink, timestamp, insights
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (ig_id, media_id)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ig_media ON ig_media_cache(ig_id);
+
+  -- GA4 snapshots
+  CREATE TABLE IF NOT EXISTS ga4_snapshots (
+    property_id    TEXT NOT NULL,
+    snapshot_date  TEXT NOT NULL,
+    kind           TEXT NOT NULL,     -- 'overview' | 'traffic_sources' | 'pages'
+    data_json      TEXT NOT NULL,
+    updated_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (property_id, snapshot_date, kind)
+  );
+  CREATE INDEX IF NOT EXISTS idx_ga4_snap ON ga4_snapshots(property_id, snapshot_date DESC);
+
+  -- Cache generico de respostas HTTP (Google Ads/IG/GA4 endpoints custom)
+  -- Chave: 'GADS:customerId:kind:days:since:until' (ou similar por API)
+  CREATE TABLE IF NOT EXISTS api_cache (
+    cache_key    TEXT PRIMARY KEY,
+    value_json   TEXT NOT NULL,
+    expires_at   TEXT NOT NULL,        -- ISO datetime
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+  CREATE INDEX IF NOT EXISTS idx_api_cache_exp ON api_cache(expires_at);
 `)
 
 // ============ SNAPSHOTS ============
@@ -269,5 +321,145 @@ export function saveTemplate(name, config) { return insertTemplate.run(name, JSO
 export function listTemplates() { return selectTemplates.all() }
 export function getTemplate(id) { const r = selectTemplate.get(id); return r ? JSON.parse(r.config_json) : null }
 export function removeTemplate(id) { deleteTemplate.run(id) }
+
+// ============ GOOGLE ADS SNAPSHOTS ============
+const upsertGadsSnap = db.prepare(`
+  INSERT INTO gads_snapshots (customer_id, snapshot_date, kind, data_json, updated_at)
+  VALUES (?, ?, ?, ?, datetime('now'))
+  ON CONFLICT(customer_id, snapshot_date, kind) DO UPDATE SET
+    data_json = excluded.data_json,
+    updated_at = datetime('now')
+`)
+const selectGadsRange = db.prepare(`
+  SELECT snapshot_date, data_json FROM gads_snapshots
+  WHERE customer_id = ? AND kind = ? AND snapshot_date >= ? AND snapshot_date <= ?
+  ORDER BY snapshot_date ASC
+`)
+const selectGadsLatest = db.prepare(`SELECT MAX(updated_at) as latest FROM gads_snapshots WHERE customer_id = ?`)
+
+export function saveGadsSnapshot(customerId, date, kind, data) {
+  upsertGadsSnap.run(customerId, date, kind, JSON.stringify(data || []))
+}
+export function getGadsSnapshotsInRange(customerId, kind, since, until) {
+  return selectGadsRange.all(customerId, kind, since, until)
+    .map(r => ({ date: r.snapshot_date, data: JSON.parse(r.data_json) }))
+}
+export function getGadsLatestUpdate(customerId) {
+  const r = selectGadsLatest.get(customerId); return r?.latest || null
+}
+
+// ============ INSTAGRAM SNAPSHOTS ============
+const upsertIgSnap = db.prepare(`
+  INSERT INTO ig_snapshots (ig_id, snapshot_date, kind, data_json, updated_at)
+  VALUES (?, ?, ?, ?, datetime('now'))
+  ON CONFLICT(ig_id, snapshot_date, kind) DO UPDATE SET
+    data_json = excluded.data_json,
+    updated_at = datetime('now')
+`)
+const selectIgRange = db.prepare(`
+  SELECT snapshot_date, data_json FROM ig_snapshots
+  WHERE ig_id = ? AND kind = ? AND snapshot_date >= ? AND snapshot_date <= ?
+  ORDER BY snapshot_date ASC
+`)
+const selectIgLatest = db.prepare(`SELECT MAX(updated_at) as latest FROM ig_snapshots WHERE ig_id = ?`)
+const upsertIgMedia = db.prepare(`
+  INSERT INTO ig_media_cache (ig_id, media_id, media_json, updated_at)
+  VALUES (?, ?, ?, datetime('now'))
+  ON CONFLICT(ig_id, media_id) DO UPDATE SET
+    media_json = excluded.media_json,
+    updated_at = datetime('now')
+`)
+const selectIgMedia = db.prepare(`SELECT media_id, media_json FROM ig_media_cache WHERE ig_id = ? ORDER BY updated_at DESC LIMIT ?`)
+
+export function saveIgSnapshot(igId, date, kind, data) {
+  upsertIgSnap.run(igId, date, kind, JSON.stringify(data || {}))
+}
+export function getIgSnapshotsInRange(igId, kind, since, until) {
+  return selectIgRange.all(igId, kind, since, until)
+    .map(r => ({ date: r.snapshot_date, data: JSON.parse(r.data_json) }))
+}
+export function getIgLatestUpdate(igId) {
+  const r = selectIgLatest.get(igId); return r?.latest || null
+}
+export function saveIgMedia(igId, mediaObj) {
+  upsertIgMedia.run(igId, mediaObj.id, JSON.stringify(mediaObj))
+}
+export function getIgMedia(igId, limit = 50) {
+  return selectIgMedia.all(igId, limit).map(r => JSON.parse(r.media_json))
+}
+
+// ============ GA4 SNAPSHOTS ============
+const upsertGa4Snap = db.prepare(`
+  INSERT INTO ga4_snapshots (property_id, snapshot_date, kind, data_json, updated_at)
+  VALUES (?, ?, ?, ?, datetime('now'))
+  ON CONFLICT(property_id, snapshot_date, kind) DO UPDATE SET
+    data_json = excluded.data_json,
+    updated_at = datetime('now')
+`)
+const selectGa4Range = db.prepare(`
+  SELECT snapshot_date, data_json FROM ga4_snapshots
+  WHERE property_id = ? AND kind = ? AND snapshot_date >= ? AND snapshot_date <= ?
+  ORDER BY snapshot_date ASC
+`)
+const selectGa4Latest = db.prepare(`SELECT MAX(updated_at) as latest FROM ga4_snapshots WHERE property_id = ?`)
+
+export function saveGa4Snapshot(propertyId, date, kind, data) {
+  upsertGa4Snap.run(propertyId, date, kind, JSON.stringify(data || {}))
+}
+export function getGa4SnapshotsInRange(propertyId, kind, since, until) {
+  return selectGa4Range.all(propertyId, kind, since, until)
+    .map(r => ({ date: r.snapshot_date, data: JSON.parse(r.data_json) }))
+}
+export function getGa4LatestUpdate(propertyId) {
+  const r = selectGa4Latest.get(propertyId); return r?.latest || null
+}
+
+// ============ API CACHE GENERICO (Google Ads/IG/GA4 respostas HTTP) ============
+const upsertApiCache = db.prepare(`
+  INSERT INTO api_cache (cache_key, value_json, expires_at, updated_at)
+  VALUES (?, ?, ?, datetime('now'))
+  ON CONFLICT(cache_key) DO UPDATE SET
+    value_json = excluded.value_json,
+    expires_at = excluded.expires_at,
+    updated_at = datetime('now')
+`)
+const selectApiCache = db.prepare(`SELECT value_json, updated_at, expires_at FROM api_cache WHERE cache_key = ? AND expires_at > datetime('now')`)
+const selectApiCacheStale = db.prepare(`SELECT value_json, updated_at FROM api_cache WHERE cache_key = ?`)
+const cleanExpired = db.prepare(`DELETE FROM api_cache WHERE expires_at < datetime('now', '-7 days')`)
+
+// Coleta lixo a cada boot
+cleanExpired.run()
+
+/**
+ * Cache wrapper: se ha valor fresco, retorna. Senao chama factory, salva e retorna.
+ * Se factory falhar, tenta retornar valor stale (fora do TTL) se existir — pra
+ * o dashboard nunca ficar branco quando o Google/Meta esta com rate limit.
+ */
+export async function apiCached(key, ttlMinutes, factory) {
+  const hit = selectApiCache.get(key)
+  if (hit) {
+    return { data: JSON.parse(hit.value_json), from: 'cache', updated: hit.updated_at }
+  }
+  try {
+    const value = await factory()
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60000).toISOString().slice(0, 19).replace('T', ' ')
+    upsertApiCache.run(key, JSON.stringify(value), expiresAt)
+    return { data: value, from: 'live', updated: new Date().toISOString().slice(0, 19).replace('T', ' ') }
+  } catch (err) {
+    // Fallback: se falhou (rate limit etc), tenta cache stale
+    const stale = selectApiCacheStale.get(key)
+    if (stale) return { data: JSON.parse(stale.value_json), from: 'stale', updated: stale.updated_at, error: err.message }
+    throw err
+  }
+}
+
+export function cacheGet(key) {
+  const hit = selectApiCache.get(key)
+  return hit ? { data: JSON.parse(hit.value_json), updated: hit.updated_at } : null
+}
+export function cacheSet(key, value, ttlMinutes) {
+  const expiresAt = new Date(Date.now() + ttlMinutes * 60000).toISOString().slice(0, 19).replace('T', ' ')
+  upsertApiCache.run(key, JSON.stringify(value), expiresAt)
+}
 
 export default db

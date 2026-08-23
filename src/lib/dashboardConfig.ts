@@ -28,10 +28,14 @@ export interface DashboardConfig {
   table: string[]              // metric-keys das colunas da tabela de campanhas
   topCreativesSort: string     // metric-key default do filtro de top criativos
   sections: {
-    key: string                // 'cards' | 'chart' | 'funnel' | 'campaigns' | 'topCreatives'
+    key: string
     visible: boolean
     order: number
   }[]
+  // Fase E: quais Meta action_types contam como "conversao" pra esse cliente
+  // (aplicado no funil + card conversoes do Overview). Se vazio, usa default
+  // ['purchase', 'lead', 'messaging_conversation_started_7d']
+  metaConversionActions?: string[]
 }
 
 // Config padrao (usada quando o cliente ainda nao personalizou)
@@ -49,6 +53,7 @@ export const DEFAULT_CONFIG: DashboardConfig = {
     { key: 'campaigns',    visible: true, order: 3 },
     { key: 'topCreatives', visible: true, order: 4 },
   ],
+  metaConversionActions: ['purchase', 'lead', 'onsite_conversion.messaging_conversation_started_7d'],
 }
 
 // Merge parcial com defaults (garante que campos faltantes usem default)
@@ -62,6 +67,7 @@ export function mergeConfig(partial: Partial<DashboardConfig> | null | undefined
     table: partial.table?.length ? partial.table : DEFAULT_CONFIG.table,
     topCreativesSort: partial.topCreativesSort || DEFAULT_CONFIG.topCreativesSort,
     sections: partial.sections?.length ? partial.sections : [...DEFAULT_CONFIG.sections],
+    metaConversionActions: partial.metaConversionActions || DEFAULT_CONFIG.metaConversionActions,
   }
 }
 
@@ -110,4 +116,10 @@ export async function getAccountSyncStatus(accountId: string): Promise<{ last_up
 // Forca sync com Hub (pra pegar clientes novos sem esperar 10 min)
 export async function refreshHub(): Promise<{ ok: boolean; hub_clients: number; with_meta: number; with_ig: number; with_gads: number }> {
   return apiFetch(`/api/hub/refresh`, { method: 'POST' })
+}
+
+// Limpa cache HTTP (Google Ads/IG/GA4/overview) — usado pelo Sincronizar
+// scope: 'all' | 'google-ads' | 'instagram' | 'analytics' | 'overview'
+export async function clearApiCache(scope: 'all' | 'google-ads' | 'instagram' | 'analytics' | 'overview' = 'all'): Promise<{ ok: boolean; cleared: number; scope: string }> {
+  return apiFetch(`/api/cache/clear?scope=${scope}`, { method: 'POST' })
 }

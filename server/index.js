@@ -21,7 +21,36 @@ import {
   getDashboardConfig, saveDashboardConfig, setDashboardSlug, getConfigBySlug,
   saveTemplate, listTemplates, getTemplate, removeTemplate,
   getAccountLatestUpdate,
+  apiCached, cacheGet, cacheSet,
 } from './db.js'
+
+// TTL padrao pro cache HTTP das outras APIs (Google Ads/IG/GA4)
+// 4h = balanco entre freshness e reducao de chamadas.
+const OTHER_APIS_CACHE_MIN = 240  // 4 horas
+
+/**
+ * Middleware que faz cache automatico baseado na URL completa.
+ * - Se ha valor fresco no cache, retorna direto sem chamar o handler
+ * - Senao, chama o handler normalmente e intercepta res.json pra salvar
+ * - Query param ?refresh=1 força bypass (usado pelo botao Sincronizar)
+ */
+function cacheMiddleware(req, res, next) {
+  if (req.query.refresh === '1') return next()
+  const key = `${req.method}:${req.originalUrl.split('?')[0]}?${new URLSearchParams(req.query).toString()}`
+  const hit = cacheGet(key)
+  if (hit) {
+    return res.json({ ...hit.data, _cache_meta: { from: 'cache', updated: hit.updated } })
+  }
+  const originalJson = res.json.bind(res)
+  res.json = (body) => {
+    // Nao cacheia erros (statusCode >= 400) nem respostas com "error" no corpo
+    if (res.statusCode < 400 && body && !body.error) {
+      cacheSet(key, body, OTHER_APIS_CACHE_MIN)
+    }
+    return originalJson({ ...body, _cache_meta: { from: 'live', updated: new Date().toISOString().slice(0,19).replace('T',' ') } })
+  }
+  next()
+}
 import cron from 'node-cron'
 import { nanoid } from 'nanoid'
 
@@ -364,6 +393,28 @@ app.get('/api/meta/accounts', auth, async (req, res) => {
   }
 })
 
+// Limpa cache HTTP das APIs (Google Ads/IG/GA4) — usado pelo botao Sincronizar
+// Pode filtrar por padrao: ?scope=google-ads | instagram | analytics | all
+import db from './db.js'
+app.post('/api/cache/clear', auth, (req, res) => {
+  try {
+    const scope = req.query.scope || 'all'
+    let n = 0
+    if (scope === 'all') {
+      n = db.prepare('DELETE FROM api_cache').run().changes
+    } else if (scope === 'google-ads') {
+      n = db.prepare("DELETE FROM api_cache WHERE cache_key LIKE '%/api/google-ads/%'").run().changes
+    } else if (scope === 'instagram') {
+      n = db.prepare("DELETE FROM api_cache WHERE cache_key LIKE '%/api/instagram/%'").run().changes
+    } else if (scope === 'analytics') {
+      n = db.prepare("DELETE FROM api_cache WHERE cache_key LIKE '%/api/analytics/%'").run().changes
+    }
+    res.json({ ok: true, cleared: n, scope })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Forca sync com Hub agora (usar quando adicionar cliente novo no Hub e nao quer aguardar 10 min)
 app.post('/api/hub/refresh', auth, async (_req, res) => {
   try {
@@ -508,7 +559,7 @@ app.get('/api/instagram/accounts', auth, async (req, res) => {
 })
 
 // Instagram profile info
-app.get('/api/instagram/:igId/profile', auth, async (req, res) => {
+app.get('/api/instagram/:igId/profile', auth, cacheMiddleware, async (req, res) => {
   try {
     const data = await metaFetch(`/${req.params.igId}`, {
       fields: 'id,name,username,followers_count,follows_count,media_count,profile_picture_url,biography',
@@ -521,7 +572,7 @@ app.get('/api/instagram/:igId/profile', auth, async (req, res) => {
 
 // Instagram account insights (with comparison)
 // IG API requires two separate calls: daily metrics (period=day) and total_value metrics
-app.get('/api/instagram/:igId/insights', auth, async (req, res) => {
+app.get('/api/instagram/:igId/insights', auth, cacheMiddleware, async (req, res) => {
   try {
     const { igId } = req.params
     const { days = '7', since, until } = req.query
@@ -591,7 +642,7 @@ app.get('/api/instagram/:igId/insights', auth, async (req, res) => {
 })
 
 // Instagram recent media with engagement
-app.get('/api/instagram/:igId/media', auth, async (req, res) => {
+app.get('/api/instagram/:igId/media', auth, cacheMiddleware, async (req, res) => {
   try {
     const { igId } = req.params
     const { limit = '20' } = req.query
@@ -1775,7 +1826,7 @@ app.get('/api/google-ads/accounts', auth, async (req, res) => {
 })
 
 // Google Ads campaign performance (with Quality Score, Impression Share, period comparison)
-app.get('/api/google-ads/:customerId/campaigns', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/campaigns', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -1856,7 +1907,7 @@ app.get('/api/google-ads/:customerId/campaigns', auth, async (req, res) => {
 })
 
 // Google Ads daily performance (with conversions + previous period)
-app.get('/api/google-ads/:customerId/daily', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/daily', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -1896,7 +1947,7 @@ app.get('/api/google-ads/:customerId/daily', auth, async (req, res) => {
 })
 
 // Google Ads keyword performance
-app.get('/api/google-ads/:customerId/keywords', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/keywords', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -1934,7 +1985,7 @@ app.get('/api/google-ads/:customerId/keywords', auth, async (req, res) => {
 })
 
 // Google Ads search terms report
-app.get('/api/google-ads/:customerId/search-terms', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/search-terms', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -1970,7 +2021,7 @@ app.get('/api/google-ads/:customerId/search-terms', auth, async (req, res) => {
 })
 
 // Google Ads device performance
-app.get('/api/google-ads/:customerId/devices', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/devices', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -2014,7 +2065,7 @@ app.get('/api/google-ads/:customerId/devices', auth, async (req, res) => {
 })
 
 // Google Ads hour-of-day performance
-app.get('/api/google-ads/:customerId/hourly', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/hourly', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -2056,7 +2107,7 @@ app.get('/api/google-ads/:customerId/hourly', auth, async (req, res) => {
 })
 
 // Google Ads conversion actions breakdown
-app.get('/api/google-ads/:customerId/conversions', auth, async (req, res) => {
+app.get('/api/google-ads/:customerId/conversions', auth, cacheMiddleware, async (req, res) => {
   try {
     const { customerId } = req.params
     const { days = '30', since, until } = req.query
@@ -2149,7 +2200,7 @@ app.get('/api/analytics/properties', auth, (req, res) => {
 })
 
 // GA4 main report (KPIs + comparison + daily + sources + pages + devices)
-app.get('/api/analytics/:propertyId/report', auth, async (req, res) => {
+app.get('/api/analytics/:propertyId/report', auth, cacheMiddleware, async (req, res) => {
   try {
     const { propertyId } = req.params
     const { days = '7', since, until } = req.query
@@ -2586,7 +2637,7 @@ app.get('/api/kiwify/products', auth, async (req, res) => {
 // OVERVIEW (Aggregated data from all sources)
 // =============================================
 
-app.get('/api/overview/:accountId', auth, async (req, res) => {
+app.get('/api/overview/:accountId', auth, cacheMiddleware, async (req, res) => {
   try {
     const { accountId } = req.params
     const accountName = req.query.name || ''
