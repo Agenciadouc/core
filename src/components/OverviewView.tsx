@@ -1,13 +1,11 @@
+// Overview repaginado — usa MetricCards + FunnelChart (mesmo visual das outras abas).
+// Agrega dados de Meta + Google Ads + Instagram + GA4 + CRM + Kiwify no mesmo card.
+
 import { useState, useEffect } from 'react'
 import { fetchOverview, formatBRL, formatNumber, pctChange, type OverviewData } from '../lib/api'
-import {
-  ResponsiveContainer, AreaChart, Area, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip, ComposedChart, Line,
-} from 'recharts'
-import {
-  DollarSign, Users, TrendingUp, TrendingDown, Target, Eye, MousePointerClick,
-  MessageCircle, ShoppingCart, Globe, Instagram, AlertTriangle, BarChart3,
-} from 'lucide-react'
+import { RefreshCw, TrendingUp, TrendingDown, DollarSign, Users, Target, Eye, MousePointerClick, MessageCircle, ShoppingCart, Globe, Instagram, BarChart3, Zap, PackagePlus, AlertTriangle } from 'lucide-react'
+import { clearApiCache } from '../lib/dashboardConfig'
+import type { ComponentType } from 'react'
 
 interface Props {
   accountId: string
@@ -17,43 +15,96 @@ interface Props {
   until?: string
 }
 
-function Tip({ active, payload, label }: any) {
-  if (!active || !payload?.length) return null
+// Cor + icone por metrica do Overview
+const OV_VISUALS: Record<string, { icon: ComponentType<{ size?: number }>; color: string }> = {
+  spend_total:     { icon: DollarSign,        color: '#EA4335' },
+  spend_meta:      { icon: DollarSign,        color: '#1877F2' },
+  spend_gads:      { icon: DollarSign,        color: '#4285F4' },
+  impressions:     { icon: Eye,               color: '#FFAA83' },
+  reach:           { icon: Users,             color: '#9B59B6' },
+  clicks:          { icon: MousePointerClick, color: '#5DADE2' },
+  ctr:             { icon: Target,            color: '#FFB70F' },
+  conversions:     { icon: Target,            color: '#34C759' },
+  messaging:       { icon: MessageCircle,     color: '#25D366' },
+  leads:           { icon: PackagePlus,       color: '#34A853' },
+  purchases:       { icon: ShoppingCart,      color: '#34C759' },
+  revenue:         { icon: DollarSign,        color: '#34C759' },
+  roas:            { icon: TrendingUp,        color: '#34C759' },
+  cpl:             { icon: Target,            color: '#FFAA83' },
+  cost_per_purchase: { icon: Target,          color: '#FF6B6B' },
+  sessions:        { icon: Globe,             color: '#9B59B6' },
+  users:           { icon: Users,             color: '#9B59B6' },
+  ig_followers:    { icon: Instagram,         color: '#E1306C' },
+  ig_reach:        { icon: Eye,               color: '#E1306C' },
+  ig_interactions: { icon: Zap,               color: '#F77737' },
+  qual_sim:        { icon: Target,            color: '#34C759' },
+  qual_nao:        { icon: TrendingDown,      color: '#FF6B6B' },
+}
+
+function Card({ label, value, sub, change, icon, color }: {
+  label: string; value: string; sub?: string; change?: number | null;
+  icon: ComponentType<{ size?: number }>; color: string
+}) {
+  const Icon = icon
+  const isPos = change !== null && change !== undefined && change >= 0
   return (
-    <div style={{ background: '#130A24', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: '10px 14px', fontSize: 12 }}>
-      <p style={{ color: '#9B96B0', marginBottom: 6 }}>{label}</p>
-      {payload.map((p: any) => <p key={p.name} style={{ color: p.color || '#fff', fontWeight: 600 }}>{p.name}: {p.value}</p>)}
+    <div className="metric-card">
+      <div className="metric-header">
+        <span className="metric-label">{label}</span>
+        <div className="metric-icon" style={{ background: `${color}20`, color }}>
+          <Icon size={14} />
+        </div>
+      </div>
+      <div className="metric-value">{value}</div>
+      {(change !== null && change !== undefined) || sub ? (
+        <div className="metric-sub">
+          {change !== null && change !== undefined && (
+            <span className={isPos ? 'positive' : 'negative'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+              {isPos ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
+              {isPos ? '+' : ''}{change.toFixed(1)}%
+            </span>
+          )}
+          {sub && <span style={{ marginLeft: change !== null && change !== undefined ? 6 : 0, color: 'var(--text-muted)' }}>{sub}</span>}
+        </div>
+      ) : null}
     </div>
   )
 }
 
-function Change({ current, previous, invert }: { current: number; previous: number; invert?: boolean }) {
-  const ch = pctChange(current, previous)
-  if (ch === null) return null
-  const pos = invert ? ch <= 0 : ch >= 0
-  return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 11, fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: pos ? 'rgba(52,199,89,0.12)' : 'rgba(255,107,107,0.12)', color: pos ? '#34C759' : '#FF6B6B' }}>
-      {ch >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-      {ch > 0 ? '+' : ''}{ch.toFixed(1)}%
-    </span>
-  )
-}
+// Funil no visual novo (centralizado, barras coloridas)
+const FUNNEL_COLORS = [
+  'linear-gradient(90deg, #FF6B8A 0%, #FF5378 100%)',
+  'linear-gradient(90deg, #FFAA83 0%, #FF9066 100%)',
+  'linear-gradient(90deg, #9B59B6 0%, #8548A3 100%)',
+  'linear-gradient(90deg, #5DADE2 0%, #3F97CE 100%)',
+  'linear-gradient(90deg, #34C759 0%, #22A946 100%)',
+  'linear-gradient(90deg, #FFB300 0%, #E69C00 100%)',
+]
 
-function BigKPI({ label, value, icon, color, current, previous, invert, sub }: {
-  label: string; value: string; icon: React.ReactNode; color: string;
-  current?: number; previous?: number; invert?: boolean; sub?: string
-}) {
+function Funnel({ steps }: { steps: { name: string; value: number }[] }) {
+  if (steps.length < 2) return <div style={{ color: 'var(--text-muted)', padding: 30, textAlign: 'center' }}>Dados insuficientes pro funil</div>
+  const max = Math.max(...steps.map(s => s.value))
+  if (max === 0) return <div style={{ color: 'var(--text-muted)', padding: 30, textAlign: 'center' }}>Sem dados no periodo</div>
+  const MIN = 28
   return (
-    <div className="metric-card" style={{ minHeight: 110 }}>
-      <div className="metric-header">
-        <span className="metric-label">{label}</span>
-        <div className="metric-icon" style={{ background: `${color}20`, color }}>{icon}</div>
-      </div>
-      <div className="metric-value" style={{ fontSize: 26 }}>{value}</div>
-      <div className="metric-sub">
-        {current !== undefined && previous !== undefined && <Change current={current} previous={previous} invert={invert} />}
-        {sub && <span style={{ marginLeft: current !== undefined ? 6 : 0 }}>{sub}</span>}
-      </div>
+    <div className="funnel-classic">
+      {steps.map((s, i) => {
+        const ratio = s.value / max
+        const width = MIN + (100 - MIN) * ratio
+        const prev = i > 0 ? steps[i - 1] : null
+        const conv = prev && prev.value > 0 ? (s.value / prev.value) * 100 : null
+        return (
+          <div key={s.name} className="funnel-classic-row">
+            <div className="funnel-classic-bar-wrapper" style={{ width: `${width}%` }}>
+              <div className="funnel-classic-bar" style={{ background: FUNNEL_COLORS[i % FUNNEL_COLORS.length], color: '#fff' }}>
+                <div className="funnel-classic-label">{s.name}</div>
+                <div className="funnel-classic-value">{formatNumber(s.value)}</div>
+              </div>
+            </div>
+            {conv !== null && <div className="funnel-classic-rate">{conv.toFixed(1)}%</div>}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -61,14 +112,40 @@ function BigKPI({ label, value, icon, color, current, previous, invert, sub }: {
 export default function OverviewView({ accountId, accountName, days, since, until }: Props) {
   const [data, setData] = useState<OverviewData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [syncing, setSyncing] = useState(false)
+  const [cacheMeta, setCacheMeta] = useState<{ from?: string; updated?: string } | null>(null)
 
-  useEffect(() => {
+  const load = () => {
     setLoading(true)
     fetchOverview(accountId, accountName, days, since, until)
-      .then(setData)
+      .then(d => {
+        setData(d)
+        setCacheMeta((d as any)._cache_meta || null)
+      })
       .catch(() => setData(null))
       .finally(() => setLoading(false))
-  }, [accountId, accountName, days, since, until])
+  }
+
+  useEffect(() => { load() }, [accountId, accountName, days, since, until])
+
+  const handleSync = async () => {
+    setSyncing(true)
+    try {
+      await clearApiCache('overview')
+      load()
+    } catch (e) { console.error(e) }
+    setSyncing(false)
+  }
+
+  const formatSyncAgo = (u: string | undefined) => {
+    if (!u) return 'agora'
+    const t = new Date(u.replace(' ', 'T') + 'Z').getTime()
+    const diffMin = Math.round((Date.now() - t) / 60000)
+    if (diffMin < 1) return 'agora'
+    if (diffMin < 60) return `ha ${diffMin} min`
+    const diffH = Math.round(diffMin / 60)
+    return `ha ${diffH}h`
+  }
 
   if (loading) return <div className="loading-container"><div className="spinner" /><span>Carregando visao geral...</span></div>
   if (!data) return <div className="empty-state"><div className="icon">📊</div><h3>Sem dados disponiveis</h3></div>
@@ -80,57 +157,50 @@ export default function OverviewView({ accountId, accountName, days, since, unti
   const hasGA4 = !!s.ga4
   const hasIG = !!s.instagram
   const hasKiwify = !!s.kiwify
+  const hasCRM = !!s.crm && (s.crm.qualSim || s.crm.qualNao || s.crm.qualMeio)
 
-  // Funnel data
+  // Totais unificados
+  const totalSpend = t.spend || 0
+  const totalPrevSpend = t.prevSpend || 0
   const totalImpressions = (s.meta?.impressions || 0) + (s.gads?.impressions || 0)
   const totalClicks = (s.meta?.clicks || 0) + (s.gads?.clicks || 0)
-  const funnelSteps: { name: string; value: number; color: string }[] = [
-    { name: 'Impressoes', value: totalImpressions, color: '#FBBC04' },
-    { name: 'Cliques', value: totalClicks, color: '#4285F4' },
+  const totalConversions = (t.metaConversions || 0) + (t.gadsConversions || 0)
+  const totalPrevConversions = (t.prevMetaConversions || 0) + (t.prevGadsConversions || 0)
+  const totalRevenue = (s.kiwify?.revenue || 0) + (s.gads?.revenue || 0)
+  const roasUnified = totalSpend > 0 ? totalRevenue / totalSpend : 0
+  const cplUnified = totalConversions > 0 ? totalSpend / totalConversions : 0
+
+  // Funil unificado
+  const funnelSteps: { name: string; value: number }[] = [
+    { name: 'Impressoes', value: totalImpressions },
+    { name: 'Cliques', value: totalClicks },
   ]
-  if (hasGA4) funnelSteps.push({ name: 'Sessoes Site', value: s.ga4!.sessions, color: '#9B59B6' })
-  // Bottom of funnel: depends on client type
-  const metaLeads = s.meta?.leads || 0
-  const metaMsg = s.meta?.messaging || 0
-  if (hasKiwify && s.kiwify!.sales > 0) {
-    // Client has sales (e.g. Josi) → show only Vendas
-    funnelSteps.push({ name: 'Vendas', value: s.kiwify!.sales, color: '#FFB300' })
-  } else if (metaLeads > 0 || metaMsg > 0) {
-    // Show total leads + conversas combined
-    const totalOpp = metaLeads + metaMsg
-    const label = metaLeads > 0 && metaMsg > 0 ? 'Leads + Conversas' : metaLeads > 0 ? 'Leads' : 'Conversas'
-    funnelSteps.push({ name: label, value: totalOpp, color: '#34A853' })
-  }
-
-  // Channel comparison table
-  const channels: { name: string; icon: React.ReactNode; color: string; spend: number; leads: number; cpl: number; conversions: number }[] = []
-  if (hasMeta) {
-    const metaLeads = (s.meta!.leads || 0) + (s.meta!.messaging || 0)
-    channels.push({ name: 'Meta Ads', icon: <BarChart3 size={14} />, color: '#1877F2', spend: s.meta!.spend, leads: metaLeads, cpl: metaLeads > 0 ? s.meta!.spend / metaLeads : 0, conversions: s.meta!.purchases || 0 })
-  }
-  if (hasGads) {
-    channels.push({ name: 'Google Ads', icon: <Globe size={14} />, color: '#4285F4', spend: s.gads!.spend, leads: s.gads!.conversions, cpl: s.gads!.conversions > 0 ? s.gads!.spend / s.gads!.conversions : 0, conversions: s.gads!.conversions })
-  }
-
-  // Combined daily chart (merge meta daily + ga4 daily by date)
-  const dailyMap: Record<string, { date: string; investimento: number; leads: number; sessoes: number }> = {}
-  ;(data.metaDaily || []).forEach(d => {
-    const date = d.date.slice(5, 10)
-    if (!dailyMap[date]) dailyMap[date] = { date, investimento: 0, leads: 0, sessoes: 0 }
-    dailyMap[date].investimento += d.spend
-    dailyMap[date].leads += d.leads
-  })
-  ;(s.ga4?.daily || []).forEach(d => {
-    const date = d.date.replace(/(\d{4})(\d{2})(\d{2})/, '$2/$3')
-    if (!dailyMap[date]) dailyMap[date] = { date, investimento: 0, leads: 0, sessoes: 0 }
-    dailyMap[date].sessoes += d.sessions
-  })
-  const dailyData = Object.values(dailyMap).sort((a, b) => a.date.localeCompare(b.date))
+  if (hasGA4 && s.ga4!.sessions > 0) funnelSteps.push({ name: 'Sessoes site', value: s.ga4!.sessions })
+  if (totalConversions > 0) funnelSteps.push({ name: 'Conversoes', value: Math.round(totalConversions) })
+  if (hasKiwify && s.kiwify!.sales > 0) funnelSteps.push({ name: 'Vendas', value: s.kiwify!.sales })
 
   return (
     <div>
-      {/* Alerts */}
-      {data.alerts.length > 0 && (
+      {/* Toolbar */}
+      <div className="ads-toolbar">
+        <div className="ads-toolbar-meta">
+          <span className="meta-source">Geral</span>
+          <span className="meta-sep">·</span>
+          <span className="meta-collected">
+            {cacheMeta?.from === 'cache' ? `coletado ${formatSyncAgo(cacheMeta.updated)}`
+              : cacheMeta?.from === 'stale' ? `cache stale ${formatSyncAgo(cacheMeta.updated)}`
+              : 'atualizado agora'}
+          </span>
+        </div>
+        <div className="ads-toolbar-actions">
+          <button className="btn-tool" onClick={handleSync} disabled={syncing}>
+            <RefreshCw size={13} className={syncing ? 'spin' : ''} /> {syncing ? 'Sincronizando...' : 'Sincronizar'}
+          </button>
+        </div>
+      </div>
+
+      {/* Alertas */}
+      {data.alerts?.length > 0 && (
         <div style={{ marginBottom: 16, display: 'flex', flexDirection: 'column', gap: 6 }}>
           {data.alerts.map((a, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px', borderRadius: 8, fontSize: 12, fontWeight: 600,
@@ -144,229 +214,140 @@ export default function OverviewView({ accountId, accountName, days, since, unti
         </div>
       )}
 
-      {/* Big KPI Cards */}
+      {/* Cards Unificados (soma de tudo) */}
       <section className="dash-section">
-        <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
-          {t.spend > 0 && (
-            <BigKPI label="Investimento Total" value={formatBRL(t.spend)} icon={<DollarSign size={18} />} color="#EA4335" current={t.spend} previous={t.prevSpend} sub={`Meta${hasGads ? ' + Google' : ''}`} />
+        <div className="section-title">Resultado unificado</div>
+        <div className="metrics-grid">
+          {totalSpend > 0 && (
+            <Card label="Investimento total" value={formatBRL(totalSpend)} icon={OV_VISUALS.spend_total.icon} color={OV_VISUALS.spend_total.color}
+              change={totalPrevSpend > 0 ? pctChange(totalSpend, totalPrevSpend) : null}
+              sub={hasMeta && hasGads ? 'Meta + Google' : hasMeta ? 'Meta Ads' : hasGads ? 'Google Ads' : ''} />
           )}
-          {hasGA4 && (
-            <BigKPI label="Sessoes no Site" value={formatNumber(t.sessions)} icon={<Globe size={18} />} color="#9B59B6" current={t.sessions} previous={t.prevSessions} />
+          {totalImpressions > 0 && (
+            <Card label="Impressoes" value={formatNumber(totalImpressions)} icon={OV_VISUALS.impressions.icon} color={OV_VISUALS.impressions.color} />
           )}
-          {t.metaConversions > 0 && (
-            <BigKPI label="Meta Conversoes" value={formatNumber(t.metaConversions)} icon={<Target size={18} />} color="#34A853" current={t.metaConversions} previous={t.prevMetaConversions} sub="Leads + Mensagens" />
+          {totalClicks > 0 && (
+            <Card label="Cliques" value={formatNumber(totalClicks)} icon={OV_VISUALS.clicks.icon} color={OV_VISUALS.clicks.color} />
           )}
-          {t.gadsConversions > 0 && (
-            <BigKPI label="Google Conversoes" value={formatNumber(t.gadsConversions)} icon={<BarChart3 size={18} />} color="#4285F4" current={t.gadsConversions} previous={t.prevGadsConversions} sub="Conversoes do site" />
+          {totalConversions > 0 && (
+            <Card label="Conversoes" value={formatNumber(totalConversions)} icon={OV_VISUALS.conversions.icon} color={OV_VISUALS.conversions.color}
+              change={totalPrevConversions > 0 ? pctChange(totalConversions, totalPrevConversions) : null}
+              sub={hasMeta && hasGads ? 'Meta + Google' : ''} />
           )}
-          {hasKiwify && s.kiwify!.sales > 0 && (
-            <BigKPI label="Vendas" value={formatNumber(s.kiwify!.sales)} icon={<ShoppingCart size={18} />} color="#FFB300" current={s.kiwify!.sales} previous={s.kiwify!.prevSales} sub={`Receita: ${formatBRL(s.kiwify!.revenue)}`} />
+          {cplUnified > 0 && (
+            <Card label="Custo/conversao" value={formatBRL(cplUnified)} icon={OV_VISUALS.cpl.icon} color={OV_VISUALS.cpl.color} />
           )}
-          {hasKiwify && s.kiwify!.sales > 0 && t.spend > 0 ? (
-            <BigKPI label="Custo por Venda" value={formatBRL(t.spend / s.kiwify!.sales)} icon={<ShoppingCart size={18} />} color="#FFAA83"
-              current={t.spend / s.kiwify!.sales} previous={t.prevSpend > 0 && s.kiwify!.prevSales > 0 ? t.prevSpend / s.kiwify!.prevSales : undefined} invert />
-          ) : t.cpl > 0 ? (
-            <BigKPI label="CPL (Custo/Lead)" value={formatBRL(t.cpl)} icon={<Target size={18} />} color="#FFAA83" current={t.cpl} previous={t.prevCpl} invert />
-          ) : null}
-          {hasKiwify && t.roas > 0 && (
-            <BigKPI label="ROAS" value={`${t.roas.toFixed(2)}x`} icon={<TrendingUp size={18} />} color={t.roas >= 2 ? '#34A853' : t.roas >= 1 ? '#FBBC04' : '#EA4335'} sub={t.roas >= 2 ? 'Saudavel' : t.roas >= 1 ? 'No limite' : 'Negativo'} />
+          {totalRevenue > 0 && (
+            <Card label="Receita" value={formatBRL(totalRevenue)} icon={OV_VISUALS.revenue.icon} color={OV_VISUALS.revenue.color} />
           )}
-          {s.crm?.qualSim > 0 && (
-            <BigKPI label="Qualificados" value={formatNumber(s.crm.qualSim)} icon={<Target size={18} />} color="#34C759"
-              sub={`${s.crm.crmTotal > 0 ? ((s.crm.qualSim / s.crm.crmTotal) * 100).toFixed(0) : 0}% dos leads do CRM`} />
+          {roasUnified > 0 && (
+            <Card label="ROAS" value={`${roasUnified.toFixed(2)}x`} icon={OV_VISUALS.roas.icon} color={roasUnified >= 2 ? '#34A853' : roasUnified >= 1 ? '#FBBC04' : '#EA4335'}
+              sub={roasUnified >= 2 ? 'saudavel' : roasUnified >= 1 ? 'no limite' : 'negativo'} />
           )}
-          {s.crm?.qualNao > 0 && (
-            <BigKPI label="Desqualificados" value={formatNumber(s.crm.qualNao)} icon={<TrendingDown size={18} />} color="#FF6B6B"
-              sub={`${s.crm.crmTotal > 0 ? ((s.crm.qualNao / s.crm.crmTotal) * 100).toFixed(0) : 0}% sem resposta/retorno`} />
-          )}
-          {s.crm?.qualMeio > 0 && (
-            <BigKPI label="Sem Qualificação" value={formatNumber(s.crm.qualMeio)} icon={<Target size={18} />} color="#9B96B0"
-              sub={`${s.crm.crmTotal > 0 ? ((s.crm.qualMeio / s.crm.crmTotal) * 100).toFixed(0) : 0}% pendentes`} />
-          )}
-          {s.crm?.qualSim > 0 && t.spend > 0 && (
-            <BigKPI label="CPL Real (Qualificado)" value={formatBRL(t.spend / s.crm.qualSim)} icon={<DollarSign size={18} />} color="#FFAA83"
-              sub="Investimento / leads qualificados" invert />
+          {hasGA4 && s.ga4!.sessions > 0 && (
+            <Card label="Sessoes site" value={formatNumber(s.ga4!.sessions)} icon={OV_VISUALS.sessions.icon} color={OV_VISUALS.sessions.color}
+              change={s.ga4!.prevSessions > 0 ? pctChange(s.ga4!.sessions, s.ga4!.prevSessions) : null} />
           )}
         </div>
       </section>
 
-      {/* Funnel + Daily Chart side by side */}
-      <section className="dash-section">
-        <div className="section-title">Desempenho</div>
-        <div className="charts-grid">
-          {/* Daily timeline chart */}
-          {dailyData.length > 1 && (
-            <div className="chart-card">
-              <h3>Investimento & Conversoes por Dia</h3>
-              <ResponsiveContainer width="100%" height={260}>
-                <ComposedChart data={dailyData}>
-                  <defs>
-                    <linearGradient id="ovSpendGrad2" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#EA4335" stopOpacity={0.2} /><stop offset="100%" stopColor="#EA4335" stopOpacity={0} /></linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-                  <XAxis dataKey="date" tick={{ fill: '#6E6887', fontSize: 10 }} />
-                  <YAxis yAxisId="left" tick={{ fill: '#6E6887', fontSize: 10 }} tickFormatter={(v: number) => `R$${v}`} />
-                  <YAxis yAxisId="right" orientation="right" tick={{ fill: '#6E6887', fontSize: 10 }} />
-                  <Tooltip content={<Tip />} />
-                  <Area yAxisId="left" type="monotone" dataKey="investimento" name="Investimento" stroke="#EA4335" fill="url(#ovSpendGrad2)" strokeWidth={2} />
-                  <Bar yAxisId="right" dataKey="leads" name="Leads" fill="#34A853" radius={[3, 3, 0, 0]} barSize={14} opacity={0.8} />
-                </ComposedChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Funnel — Same style as Meta Ads tab */}
-          {funnelSteps.length >= 3 && (() => {
-            const COLORS = ['#FF6B8A', '#FFAA83', '#9B59B6', '#5DADE2', '#34C759', '#FFB300']
-            const maxWidth = 100, minWidth = 28
-            const widthStep = funnelSteps.length > 1 ? (maxWidth - minWidth) / (funnelSteps.length - 1) : 0
-            return (
-              <div className="chart-card">
-                <h3>Funil de Conversao</h3>
-                <div className="funnel-container">
-                  {funnelSteps.map((step, i) => {
-                    const width = maxWidth - widthStep * i
-                    const convRate = i > 0 && funnelSteps[i - 1].value > 0 ? ((step.value / funnelSteps[i - 1].value) * 100).toFixed(1) + '%' : null
-                    return (
-                      <div key={step.name} className="funnel-tier" style={{ width: `${width}%` }}>
-                        <div className="funnel-tier-bar" style={{ background: COLORS[i % COLORS.length] }}>
-                          <div className="funnel-tier-label">{step.name}</div>
-                          <div className="funnel-tier-value">{formatNumber(step.value)}</div>
-                        </div>
-                        {convRate && <div className="funnel-tier-rate">{convRate}</div>}
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
-            )
-          })()}
-        </div>
-      </section>
-
-      {/* Channel Comparison */}
-      {channels.length > 0 && (
+      {/* Funil unificado */}
+      {funnelSteps.length >= 2 && (
         <section className="dash-section">
-          <div className="section-title">Performance por Canal</div>
-          <div className="table-card">
-            <div style={{ overflowX: 'auto' }}>
-              <table className="campaign-table">
-                <thead>
-                  <tr>
-                    <th>Canal</th>
-                    <th className="right">Investimento</th>
-                    <th className="right">Leads/Conv.</th>
-                    <th className="right">CPL</th>
-                    <th className="right">% do Invest.</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {channels.map(ch => (
-                    <tr key={ch.name}>
-                      <td className="name" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ color: ch.color }}>{ch.icon}</span> {ch.name}
-                      </td>
-                      <td className="right" style={{ fontWeight: 600, color: '#fff' }}>{formatBRL(ch.spend)}</td>
-                      <td className="right" style={{ color: '#34A853' }}>{formatNumber(ch.leads)}</td>
-                      <td className="right">{ch.cpl > 0 ? formatBRL(ch.cpl) : '-'}</td>
-                      <td className="right">{t.spend > 0 ? ((ch.spend / t.spend) * 100).toFixed(0) + '%' : '-'}</td>
-                    </tr>
-                  ))}
-                  {/* Total row */}
-                  <tr style={{ borderTop: '2px solid rgba(255,255,255,0.1)', fontWeight: 700 }}>
-                    <td className="name">Total</td>
-                    <td className="right" style={{ color: '#fff' }}>{formatBRL(t.spend)}</td>
-                    <td className="right" style={{ color: '#34A853' }}>{formatNumber(t.leads)}</td>
-                    <td className="right">{t.cpl > 0 ? formatBRL(t.cpl) : '-'}</td>
-                    <td className="right">100%</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+          <div className="section-title">Funil de conversao (todas as origens)</div>
+          <div className="chart-card">
+            <Funnel steps={funnelSteps} />
           </div>
         </section>
       )}
 
-      {/* Combined Daily Chart — full width below */}
-      {dailyData.length > 2 && hasGA4 && (
+      {/* CRM cards */}
+      {hasCRM && (
         <section className="dash-section">
-          <div className="section-title">Sessoes do Site</div>
-          <div className="chart-card full-width">
-            <ResponsiveContainer width="100%" height={220}>
-              <ComposedChart data={dailyData}>
-                <defs>
-                  <linearGradient id="ovSpendGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#EA4335" stopOpacity={0.2} /><stop offset="100%" stopColor="#EA4335" stopOpacity={0} /></linearGradient>
-                  <linearGradient id="ovSessGrad" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stopColor="#9B59B6" stopOpacity={0.2} /><stop offset="100%" stopColor="#9B59B6" stopOpacity={0} /></linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="date" tick={{ fill: '#9B96B0', fontSize: 10 }} />
-                <YAxis yAxisId="left" tick={{ fill: '#9B96B0', fontSize: 10 }} tickFormatter={v => `R$${v}`} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9B96B0', fontSize: 10 }} />
-                <Tooltip content={<Tip />} />
-                <Area yAxisId="left" type="monotone" dataKey="investimento" name="Investimento" stroke="#EA4335" fill="url(#ovSpendGrad)" strokeWidth={2} />
-                {hasGA4 && <Area yAxisId="right" type="monotone" dataKey="sessoes" name="Sessoes" stroke="#9B59B6" fill="url(#ovSessGrad)" strokeWidth={2} />}
-                <Bar yAxisId="right" dataKey="leads" name="Leads" fill="#34A853" radius={[3, 3, 0, 0]} barSize={12} opacity={0.8} />
-              </ComposedChart>
-            </ResponsiveContainer>
-            <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 8, fontSize: 11 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 12, height: 3, background: '#EA4335', display: 'inline-block', borderRadius: 2 }} /> Investimento</span>
-              {hasGA4 && <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 12, height: 3, background: '#9B59B6', display: 'inline-block', borderRadius: 2 }} /> Sessoes</span>}
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><span style={{ width: 8, height: 8, background: '#34A853', display: 'inline-block', borderRadius: 2 }} /> Leads</span>
-            </div>
+          <div className="section-title">Qualificacao do CRM</div>
+          <div className="metrics-grid">
+            {s.crm!.qualSim > 0 && (
+              <Card label="Qualificados" value={formatNumber(s.crm!.qualSim)} icon={OV_VISUALS.qual_sim.icon} color={OV_VISUALS.qual_sim.color}
+                sub={s.crm!.crmTotal > 0 ? `${((s.crm!.qualSim / s.crm!.crmTotal) * 100).toFixed(0)}% dos leads` : ''} />
+            )}
+            {s.crm!.qualNao > 0 && (
+              <Card label="Desqualificados" value={formatNumber(s.crm!.qualNao)} icon={OV_VISUALS.qual_nao.icon} color={OV_VISUALS.qual_nao.color}
+                sub={s.crm!.crmTotal > 0 ? `${((s.crm!.qualNao / s.crm!.crmTotal) * 100).toFixed(0)}% dos leads` : ''} />
+            )}
+            {s.crm!.qualMeio > 0 && (
+              <Card label="Sem qualificacao" value={formatNumber(s.crm!.qualMeio)} icon={OV_VISUALS.qual_nao.icon} color="#9B96B0"
+                sub={s.crm!.crmTotal > 0 ? `${((s.crm!.qualMeio / s.crm!.crmTotal) * 100).toFixed(0)}% pendentes` : ''} />
+            )}
+            {s.crm!.qualSim > 0 && totalSpend > 0 && (
+              <Card label="CPL real qualificado" value={formatBRL(totalSpend / s.crm!.qualSim)} icon={OV_VISUALS.cpl.icon} color="#FFAA83" sub="Investido / leads qualificados" />
+            )}
           </div>
         </section>
       )}
 
-      {/* Meta Ads detail mini */}
+      {/* Resumos por plataforma */}
       {hasMeta && (
         <section className="dash-section">
-          <div className="section-title">Meta Ads — Resumo</div>
-          <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-            <div className="metric-card"><div className="metric-label">Investimento</div><div className="metric-value" style={{ fontSize: 18 }}>{formatBRL(s.meta!.spend)}</div></div>
-            <div className="metric-card"><div className="metric-label">Alcance</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.meta!.reach)}</div></div>
-            <div className="metric-card"><div className="metric-label">Cliques</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.meta!.clicks)}</div></div>
-            {s.meta!.messaging > 0 && <div className="metric-card"><div className="metric-label">Conversas</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.meta!.messaging)}</div><div className="metric-sub"><Change current={s.meta!.messaging} previous={s.meta!.prevMessaging} /></div></div>}
-            {s.meta!.leads > 0 && <div className="metric-card"><div className="metric-label">Leads Form</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.meta!.leads)}</div><div className="metric-sub"><Change current={s.meta!.leads} previous={s.meta!.prevLeads} /></div></div>}
-            {s.meta!.linkClicks > 0 && <div className="metric-card"><div className="metric-label">Link Clicks</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.meta!.linkClicks)}</div></div>}
+          <div className="section-title">Meta Ads</div>
+          <div className="metrics-grid">
+            <Card label="Investimento" value={formatBRL(s.meta!.spend)} icon={OV_VISUALS.spend_meta.icon} color={OV_VISUALS.spend_meta.color} />
+            <Card label="Alcance" value={formatNumber(s.meta!.reach)} icon={OV_VISUALS.reach.icon} color={OV_VISUALS.reach.color} />
+            <Card label="Cliques link" value={formatNumber(s.meta!.linkClicks || s.meta!.clicks)} icon={OV_VISUALS.clicks.icon} color={OV_VISUALS.clicks.color} />
+            {s.meta!.messaging > 0 && (
+              <Card label="Conversas" value={formatNumber(s.meta!.messaging)} icon={OV_VISUALS.messaging.icon} color={OV_VISUALS.messaging.color}
+                change={s.meta!.prevMessaging > 0 ? pctChange(s.meta!.messaging, s.meta!.prevMessaging) : null} />
+            )}
+            {s.meta!.leads > 0 && (
+              <Card label="Leads form" value={formatNumber(s.meta!.leads)} icon={OV_VISUALS.leads.icon} color={OV_VISUALS.leads.color}
+                change={s.meta!.prevLeads > 0 ? pctChange(s.meta!.leads, s.meta!.prevLeads) : null} />
+            )}
+            {s.meta!.purchases > 0 && (
+              <Card label="Vendas Meta" value={formatNumber(s.meta!.purchases)} icon={OV_VISUALS.purchases.icon} color={OV_VISUALS.purchases.color} />
+            )}
           </div>
         </section>
       )}
 
-      {/* Google Ads detail mini */}
       {hasGads && (
         <section className="dash-section">
-          <div className="section-title">Google Ads — Resumo</div>
-          <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-            <div className="metric-card"><div className="metric-label">Investimento</div><div className="metric-value" style={{ fontSize: 18 }}>{formatBRL(s.gads!.spend)}</div></div>
-            <div className="metric-card"><div className="metric-label">Cliques</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.gads!.clicks)}</div></div>
-            <div className="metric-card"><div className="metric-label">Conversoes</div><div className="metric-value" style={{ fontSize: 18, color: '#34A853' }}>{s.gads!.conversions.toFixed(0)}</div><div className="metric-sub"><Change current={s.gads!.conversions} previous={s.gads!.prevConversions} /></div></div>
-            {s.gads!.revenue > 0 && <div className="metric-card"><div className="metric-label">Receita</div><div className="metric-value" style={{ fontSize: 18 }}>{formatBRL(s.gads!.revenue)}</div></div>}
+          <div className="section-title">Google Ads</div>
+          <div className="metrics-grid">
+            <Card label="Investimento" value={formatBRL(s.gads!.spend)} icon={OV_VISUALS.spend_gads.icon} color={OV_VISUALS.spend_gads.color} />
+            <Card label="Impressoes" value={formatNumber(s.gads!.impressions)} icon={OV_VISUALS.impressions.icon} color={OV_VISUALS.impressions.color} />
+            <Card label="Cliques" value={formatNumber(s.gads!.clicks)} icon={OV_VISUALS.clicks.icon} color={OV_VISUALS.clicks.color} />
+            <Card label="Conversoes" value={s.gads!.conversions.toFixed(0)} icon={OV_VISUALS.conversions.icon} color={OV_VISUALS.conversions.color}
+              change={s.gads!.prevConversions > 0 ? pctChange(s.gads!.conversions, s.gads!.prevConversions) : null} />
+            {s.gads!.revenue > 0 && (
+              <Card label="Receita" value={formatBRL(s.gads!.revenue)} icon={OV_VISUALS.revenue.icon} color={OV_VISUALS.revenue.color} />
+            )}
           </div>
         </section>
       )}
 
-      {/* GA4 detail mini */}
       {hasGA4 && (
         <section className="dash-section">
-          <div className="section-title">Website — Resumo</div>
-          <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-            <div className="metric-card"><div className="metric-label">Sessoes</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.ga4!.sessions)}</div><div className="metric-sub"><Change current={s.ga4!.sessions} previous={s.ga4!.prevSessions} /></div></div>
-            <div className="metric-card"><div className="metric-label">Usuarios</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.ga4!.users)}</div><div className="metric-sub"><Change current={s.ga4!.users} previous={s.ga4!.prevUsers} /></div></div>
-            <div className="metric-card"><div className="metric-label">Engajamento</div><div className="metric-value" style={{ fontSize: 18 }}>{s.ga4!.engagementRate.toFixed(1)}%</div></div>
-            <div className="metric-card"><div className="metric-label">Rejeicao</div><div className="metric-value" style={{ fontSize: 18, color: s.ga4!.bounceRate > 60 ? '#EA4335' : '#34A853' }}>{s.ga4!.bounceRate.toFixed(1)}%</div></div>
+          <div className="section-title">Site (Analytics)</div>
+          <div className="metrics-grid">
+            <Card label="Sessoes" value={formatNumber(s.ga4!.sessions)} icon={OV_VISUALS.sessions.icon} color={OV_VISUALS.sessions.color}
+              change={s.ga4!.prevSessions > 0 ? pctChange(s.ga4!.sessions, s.ga4!.prevSessions) : null} />
+            <Card label="Usuarios" value={formatNumber(s.ga4!.users)} icon={OV_VISUALS.users.icon} color={OV_VISUALS.users.color}
+              change={s.ga4!.prevUsers > 0 ? pctChange(s.ga4!.users, s.ga4!.prevUsers) : null} />
+            <Card label="Engajamento" value={`${s.ga4!.engagementRate.toFixed(1)}%`} icon={OV_VISUALS.ctr.icon} color={OV_VISUALS.ctr.color} />
+            <Card label="Rejeicao" value={`${s.ga4!.bounceRate.toFixed(1)}%`} icon={OV_VISUALS.qual_nao.icon} color={s.ga4!.bounceRate > 60 ? '#EA4335' : '#34A853'} />
           </div>
         </section>
       )}
 
-      {/* Instagram mini */}
       {hasIG && (
         <section className="dash-section">
           <div className="section-title">Instagram — @{s.instagram!.username}</div>
-          <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
-            <div className="metric-card"><div className="metric-label">Seguidores</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.instagram!.followers)}</div></div>
-            <div className="metric-card"><div className="metric-label">Alcance</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.instagram!.reach)}</div></div>
-            <div className="metric-card"><div className="metric-label">Interacoes</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.instagram!.interactions)}</div></div>
-            {s.instagram!.reach > 0 && <div className="metric-card"><div className="metric-label">Taxa Engajamento</div><div className="metric-value" style={{ fontSize: 18 }}>{((s.instagram!.interactions / s.instagram!.reach) * 100).toFixed(2)}%</div></div>}
+          <div className="metrics-grid">
+            <Card label="Seguidores" value={formatNumber(s.instagram!.followers)} icon={OV_VISUALS.ig_followers.icon} color={OV_VISUALS.ig_followers.color} />
+            <Card label="Alcance" value={formatNumber(s.instagram!.reach)} icon={OV_VISUALS.ig_reach.icon} color={OV_VISUALS.ig_reach.color} />
+            <Card label="Interacoes" value={formatNumber(s.instagram!.interactions)} icon={OV_VISUALS.ig_interactions.icon} color={OV_VISUALS.ig_interactions.color} />
+            {s.instagram!.reach > 0 && (
+              <Card label="Taxa engajamento" value={`${((s.instagram!.interactions / s.instagram!.reach) * 100).toFixed(2)}%`} icon={OV_VISUALS.ctr.icon} color={OV_VISUALS.ctr.color} />
+            )}
           </div>
         </section>
       )}
