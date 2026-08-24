@@ -407,36 +407,29 @@ export default function Dashboard() {
                       </section>
                     )}
 
-                    {/* GRAFICO DIARIO */}
+                    {/* GRAFICO DIARIO + FUNIL — lado a lado */}
                     <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
                       {editing && (
                         <div className="section-editor-bar">
-                          <span className="section-chip">Grafico diario</span>
+                          <span className="section-chip">Grafico + Funil</span>
                           <MetricPicker label="Metricas do grafico" selected={config.chartAvailableMetrics} onChange={v => patchConfig({ chartAvailableMetrics: v })} />
-                          <MetricPicker label={`Default: ${config.chartDefaultMetric}`} selected={[config.chartDefaultMetric]} onChange={v => patchConfig({ chartDefaultMetric: v[0] || 'spend' })} singleSelect allowedKeys={config.chartAvailableMetrics} />
-                        </div>
-                      )}
-                      <div className="chart-card">
-                        <SpendChart
-                          currentData={dailyCompare?.current || []}
-                          previousData={dailyCompare?.previous || []}
-                          defaultMetric={config.chartDefaultMetric}
-                          availableMetrics={config.chartAvailableMetrics}
-                        />
-                      </div>
-                    </section>
-
-                    {/* FUNIL */}
-                    <section className={`dash-section ${editing ? 'is-editing' : ''}`}>
-                      {editing && (
-                        <div className="section-editor-bar">
-                          <span className="section-chip">Funil</span>
+                          <MetricPicker label={`Grafico default: ${config.chartDefaultMetric}`} selected={[config.chartDefaultMetric]} onChange={v => patchConfig({ chartDefaultMetric: v[0] || 'spend' })} singleSelect allowedKeys={config.chartAvailableMetrics} />
                           <MetricPicker label="Etapas do funil" selected={config.funnel} onChange={v => patchConfig({ funnel: v })} />
                         </div>
                       )}
-                      <div className="chart-card">
-                        <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, letterSpacing: '.02em' }}>Funil</h3>
-                        <FunnelChart insight={current} steps={config.funnel} />
+                      <div className="perf-grid">
+                        <div className="chart-card">
+                          <SpendChart
+                            currentData={dailyCompare?.current || []}
+                            previousData={dailyCompare?.previous || []}
+                            defaultMetric={config.chartDefaultMetric}
+                            availableMetrics={config.chartAvailableMetrics}
+                          />
+                        </div>
+                        <div className="chart-card">
+                          <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, letterSpacing: '.02em' }}>Funil</h3>
+                          <FunnelChart insight={current} steps={config.funnel} />
+                        </div>
                       </div>
                     </section>
 
