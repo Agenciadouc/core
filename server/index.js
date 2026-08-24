@@ -1682,6 +1682,38 @@ app.get('/api/meta/accounts/:accountId/top-ads', auth, async (req, res) => {
   }
 })
 
+// Lista action_types unicos que apareceram nas ads da conta (nos snapshots dos ultimos 90d)
+// Usado no picker de "quais eventos contam como conversao" pra essa conta.
+app.get('/api/meta/accounts/:accountId/action-types', auth, (req, res) => {
+  try {
+    const { accountId } = req.params
+    // Pega snapshots dos ultimos 90 dias e coleta action_types unicos com contagem
+    const end = new Date(); end.setDate(end.getDate() - 1)
+    const start = new Date(end); start.setDate(start.getDate() - 90)
+    const since = fmtDate(start), until = fmtDate(end)
+
+    const allSnaps = agg.getAllAdInsights(accountId, since, until)
+    const counts = new Map()
+    for (const ins of allSnaps) {
+      if (!ins.actions) continue
+      for (const a of ins.actions) {
+        const prev = counts.get(a.action_type) || 0
+        counts.set(a.action_type, prev + parseFloat(a.value || 0))
+      }
+    }
+
+    // Ordena por volume, retorna top 100
+    const sorted = Array.from(counts.entries())
+      .map(([action_type, total]) => ({ action_type, total }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 100)
+
+    res.json({ action_types: sorted })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
 // Preview HTML de um ad — retorna iframe pronto do Meta
 // Formatos: DESKTOP_FEED_STANDARD, MOBILE_FEED_STANDARD, INSTAGRAM_STANDARD, INSTAGRAM_STORY, INSTAGRAM_REELS
 app.get('/api/meta/ads/:adId/preview', auth, async (req, res) => {
@@ -2101,6 +2133,30 @@ app.get('/api/google-ads/:customerId/hourly', auth, cacheMiddleware, async (req,
     }))
 
     res.json({ hourly })
+  } catch (err) {
+    res.status(500).json({ error: err.message })
+  }
+})
+
+// Lista conversion actions configuradas no Google Ads (pro picker do Overview)
+// Retorna id + name + category — leve, so pra popular checkboxes.
+app.get('/api/google-ads/:customerId/conversion-actions', auth, cacheMiddleware, async (req, res) => {
+  try {
+    const { customerId } = req.params
+    const results = await gaqlQuery(customerId, `
+      SELECT conversion_action.id, conversion_action.name, conversion_action.category,
+             conversion_action.status, conversion_action.type
+      FROM conversion_action
+      WHERE conversion_action.status = 'ENABLED'
+      LIMIT 200
+    `)
+    const actions = results.map(r => ({
+      id: r.conversionAction?.id || '',
+      name: r.conversionAction?.name || '',
+      category: r.conversionAction?.category || '',
+      type: r.conversionAction?.type || '',
+    })).filter(a => a.id)
+    res.json({ actions })
   } catch (err) {
     res.status(500).json({ error: err.message })
   }
