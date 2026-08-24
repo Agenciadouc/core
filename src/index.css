@@ -820,11 +820,11 @@ a { color: inherit; text-decoration: none; }
 .funnel-classic-bar-wrapper {
   transition: width .35s ease;
   min-width: 180px;
-  /* Alinhado à esquerda naturalmente (sem margin auto) — largura decresce pra direita */
+  margin: 0 auto;  /* Centralizado — forma visual de funil real */
 }
 .funnel-classic-bar {
   border-radius: 8px;
-  padding: 14px 18px;
+  padding: 18px 22px;   /* barras BEM grossas igual ao print */
   display: flex; align-items: center; justify-content: space-between;
   gap: 12px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.25);

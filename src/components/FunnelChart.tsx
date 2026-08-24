@@ -34,28 +34,29 @@ export default function FunnelChart({ insight, steps: stepKeys }: Props) {
   const maxVal = Math.max(...steps.map(s => s.value))
   if (maxVal === 0) return <div style={{ color: 'var(--text-muted)', padding: 40, textAlign: 'center' }}>Sem dados no periodo</div>
 
-  // Larguras decrescem proporcionalmente ao valor (com um piso pra nao ficar invisivel)
-  const MIN_WIDTH_PCT = 28
+  // Largura visual: decresce por POSICAO (funil real), nao por valor.
+  // Ex: 5 etapas → 100%, 85%, 70%, 55%, 40%. Sempre visual bonito.
+  // A % de conversao ao lado mostra o valor real.
   const MAX_WIDTH_PCT = 100
+  const MIN_WIDTH_PCT = 40
+  const step = steps.length > 1 ? (MAX_WIDTH_PCT - MIN_WIDTH_PCT) / (steps.length - 1) : 0
 
   return (
     <div className="funnel-classic">
-      {steps.map((step, i) => {
+      {steps.map((stepData, i) => {
         const color = FUNNEL_COLORS[i % FUNNEL_COLORS.length]
-        // Largura visual proporcional ao valor (mas nunca abaixo do MIN)
-        const ratio = maxVal > 0 ? step.value / maxVal : 0
-        const width = MIN_WIDTH_PCT + (MAX_WIDTH_PCT - MIN_WIDTH_PCT) * ratio
+        const width = MAX_WIDTH_PCT - (i * step)
 
-        // Taxa de conversao vs etapa anterior
+        // Taxa de conversao vs etapa anterior (valor real)
         const prev = i > 0 ? steps[i - 1] : null
-        const convRate = prev && prev.value > 0 ? (step.value / prev.value) * 100 : null
+        const convRate = prev && prev.value > 0 ? (stepData.value / prev.value) * 100 : null
 
         return (
-          <div key={step.key} className="funnel-classic-row">
+          <div key={stepData.key} className="funnel-classic-row">
             <div className="funnel-classic-bar-wrapper" style={{ width: `${width}%` }}>
               <div className="funnel-classic-bar" style={{ background: color.bg, color: color.fg }}>
-                <div className="funnel-classic-label">{step.label}</div>
-                <div className="funnel-classic-value">{step.format(step.value)}</div>
+                <div className="funnel-classic-label">{stepData.label}</div>
+                <div className="funnel-classic-value">{stepData.format(stepData.value)}</div>
               </div>
             </div>
             {convRate !== null && (

@@ -92,12 +92,13 @@ function Funnel({ steps }: { steps: { label: string; value: number }[] }) {
   if (steps.length < 2) return <div style={{ padding: 30, color: 'var(--text-muted)', textAlign: 'center' }}>Configure ao menos 2 etapas do funil.</div>
   const max = Math.max(...steps.map(s => s.value))
   if (max === 0) return <div style={{ padding: 30, color: 'var(--text-muted)', textAlign: 'center' }}>Sem dados no periodo</div>
-  const MIN = 28
+  // Largura visual por posicao (nao por valor) — funil bonito garantido
+  const MAX = 100, MIN = 40
+  const step = steps.length > 1 ? (MAX - MIN) / (steps.length - 1) : 0
   return (
     <div className="funnel-classic">
       {steps.map((s, i) => {
-        const ratio = s.value / max
-        const width = MIN + (100 - MIN) * ratio
+        const width = MAX - (i * step)
         const prev = i > 0 ? steps[i - 1] : null
         const conv = prev && prev.value > 0 ? (s.value / prev.value) * 100 : null
         return (
