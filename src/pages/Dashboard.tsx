@@ -268,7 +268,16 @@ export default function Dashboard() {
           <>
             {/* Header with client name + tabs */}
             <div className="main-header">
-              <h2>{selectedAccount.name}</h2>
+              <h2 style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                {selectedAccount.name}
+                <span
+                  title="Meta Ad Account ID — clique pra copiar"
+                  onClick={() => { try { navigator.clipboard.writeText(String(selectedAccount.id).replace(/^act_/, '')) } catch {} }}
+                  style={{ fontSize: 11, fontWeight: 400, color: '#7a8194', fontFamily: 'ui-monospace, SFMono-Regular, monospace', padding: '2px 8px', borderRadius: 4, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', cursor: 'copy', userSelect: 'all' }}
+                >
+                  {String(selectedAccount.id).replace(/^act_/, '')}
+                </span>
+              </h2>
               <div className="client-tabs">
                 <button className={`client-tab ${clientTab === 'overview' ? 'active' : ''}`} onClick={() => setClientTab('overview')}>
                   <LayoutDashboard size={14} /><span>Geral</span>
