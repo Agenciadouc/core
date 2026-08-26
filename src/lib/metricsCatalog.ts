@@ -81,6 +81,15 @@ export const METRICS: MetricDef[] = [
     format: formatBRL, isAverage: true,
   },
   { key: 'leads',       label: 'Leads',          category: 'vendas', extract: i => getAction(i?.actions, 'lead') + getAction(i?.actions, 'onsite_conversion.lead_grouped'), format: formatNumber },
+  { key: 'cost_per_lead', label: 'Custo por lead', category: 'vendas',
+    extract: i => {
+      if (!i) return 0
+      const leads = getAction(i.actions, 'lead') + getAction(i.actions, 'onsite_conversion.lead_grouped')
+      if (leads === 0) return 0
+      return asNum(i.spend) / leads
+    },
+    format: formatBRL, isAverage: true,
+  },
 
   // ENGAJAMENTO
   { key: 'video_views',  label: 'Visualizacoes de video', category: 'engajamento', extract: i => getAction(i?.actions, 'video_view'), format: formatNumber },
