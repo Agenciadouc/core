@@ -34,6 +34,15 @@ export const METRICS: MetricDef[] = [
 
   // MENSAGENS
   { key: 'messaging',   label: 'Conversas iniciadas', category: 'mensagens', extract: i => getAction(i?.actions, 'onsite_conversion.messaging_conversation_started_7d'), format: formatNumber },
+  { key: 'cost_per_conversation', label: 'Custo por conversa iniciada', category: 'mensagens',
+    extract: i => {
+      if (!i) return 0
+      const conv = getAction(i.actions, 'onsite_conversion.messaging_conversation_started_7d')
+      if (conv === 0) return 0
+      return asNum(i.spend) / conv
+    },
+    format: formatBRL, isAverage: true,
+  },
 
   // VENDAS
   { key: 'add_to_cart',       label: 'Adicoes ao carrinho', category: 'vendas', extract: i => getAction(i?.actions, 'add_to_cart') + getAction(i?.actions, 'offsite_conversion.fb_pixel_add_to_cart'), format: formatNumber },
