@@ -78,7 +78,9 @@ function makeGuiAutocarGadsData(days: number) {
   const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0
   const convRate = clicks > 0 ? (conversions / clicks) * 100 : 0
   const cpa = conversions > 0 ? spend / conversions : 0
-  const revenue = conversions * 2950
+  // Receita = vendas fechadas via Google (~18% das conversoes viram venda) x ticket R$2.950
+  const vendasGoogle = conversions * 0.18
+  const revenue = vendasGoogle * 2950
   const roas = spend > 0 ? revenue / spend : 0
 
   const account: GAdsAccount = { id: '5082579991', name: 'Gui Autocar Mecanica', currency: 'BRL', status: 'ENABLED' } as any
@@ -96,8 +98,8 @@ function makeGuiAutocarGadsData(days: number) {
       cpa: cv > 0 ? cs / cv : 0,
       impressionShare: impShare,
       topImprShare: topShare,
-      revenue: cv * 2950,
-      roas: cs > 0 ? (cv * 2950) / cs : 0,
+      revenue: (cv * 0.18) * 2950,
+      roas: cs > 0 ? ((cv * 0.18) * 2950) / cs : 0,
     }
   }
   const campaigns: any = {

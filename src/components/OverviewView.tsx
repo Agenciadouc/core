@@ -194,17 +194,20 @@ export default function OverviewView({ accountId, accountName, days, since, unti
     const gImpressions = Math.round(8000 * weeks)
     const gClicks = Math.round(110 * weeks)
     const gConversions = Math.round(12 * weeks)
-    const gRevenue = gConversions * 2950
+    // CRM projetado: 190 leads/mes baseline (150 Meta + 40 Google), 40% qualif, 33% close, 35% via Google
+    const totalLeads = Math.round(190 * daysScale)
+    const qualSim = Math.round(totalLeads * 0.40)
+    const qualMeio = Math.round(totalLeads * 0.15)
+    const qualNao = Math.max(0, totalLeads - qualSim - qualMeio)
+    const vendasTot = Math.round(qualSim * 0.33)
+    const vendasGoogle = vendasTot - Math.round(vendasTot * 0.65)
+    // Receita Google = vendas atribuidas ao Google x ticket medio (nao conversoes brutas)
+    const gRevenue = vendasGoogle * 2950
     s.gads = {
       spend: gSpend, impressions: gImpressions, clicks: gClicks, conversions: gConversions, revenue: gRevenue,
       prevSpend: gSpend * 0.85, prevConversions: gConversions * 0.83,
       customerId: '5082579991',
     }
-    // CRM projetado: 190 leads/mes baseline (150 Meta + 40 Google), 40% qualif
-    const totalLeads = Math.round(190 * daysScale)
-    const qualSim = Math.round(totalLeads * 0.40)
-    const qualMeio = Math.round(totalLeads * 0.15)
-    const qualNao = Math.max(0, totalLeads - qualSim - qualMeio)
     s.crm = { qualSim, qualNao, qualMeio, total: totalLeads }
   }
 
