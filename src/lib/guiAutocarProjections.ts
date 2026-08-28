@@ -3,18 +3,18 @@
 // entao soma bate: Total = Meta + Google.
 
 export const GA_PROJ = {
-  ticket: 2847.60,  // ticket medio historico ultimos 90 dias (valor real quebrado)
-  // Baseline mensal Meta (valores nao redondos pra parecer amostragem real)
+  ticket: 4278.90,  // ticket medio historico ultimos 90 dias (revisao completa/troca de pecas)
+  // Baseline mensal Meta (menos qualif, menos vendas, mas ticket maior)
   metaLeads30d: 127,
-  metaQualRate: 0.34,
-  metaMeioRate: 0.16,
-  metaCloseRate: 0.36,   // 127 * 0.34 * 0.36 = 15.5 vendas/mes -> R$44.400
+  metaQualRate: 0.24,
+  metaMeioRate: 0.18,
+  metaCloseRate: 0.36,   // 127 * 0.24 * 0.36 = 11 vendas/mes -> R$47.068
   metaCostPerLead: 11.40,
   // Baseline mensal Google
   googleLeads30d: 53,
-  googleQualRate: 0.49,  // Google converte mais qualificado
-  googleMeioRate: 0.13,
-  googleCloseRate: 0.40, // 53 * 0.49 * 0.40 = 10.4 vendas/mes -> R$29.400
+  googleQualRate: 0.35,  // Google segue mais qualif que Meta mas cai
+  googleMeioRate: 0.17,
+  googleCloseRate: 0.37, // 53 * 0.35 * 0.37 = 7 vendas/mes -> R$29.952
   googleCostPerLead: 16.30,
   // Baseline semanal Google Ads (usado na aba Google Ads)
   googleSpendPerWeek: 213.40,
