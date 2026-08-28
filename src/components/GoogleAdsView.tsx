@@ -85,12 +85,27 @@ function makeGuiAutocarGadsData(days: number) {
   const totals: any = { spend, impressions, clicks, ctr, cpc, conversions, convRate, cpa, revenue, roas, avgQualityScore: 7.2 }
   const prevTotals: any = { spend: spend * 0.85, impressions: impressions * 0.9, clicks: clicks * 0.88, ctr: ctr * 0.97, cpc: cpc * 1.02, conversions: conversions * 0.83, convRate: convRate * 0.94, cpa: cpa * 1.09, revenue: revenue * 0.83, roas: roas * 0.83 }
 
+  const mkCamp = (id: string, name: string, type: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number, impShare: number, topShare: number) => {
+    const cs = spend * sFrac, ci = Math.round(impressions * iFrac), cc = Math.max(1, Math.round(clicks * cFrac)), cv = Math.max(1, Math.round(conversions * cvFrac))
+    return {
+      id, name, status: 'ENABLED', type,
+      spend: cs, impressions: ci, clicks: cc, conversions: cv,
+      ctr: ci > 0 ? (cc / ci) * 100 : 0,
+      cpc: cc > 0 ? cs / cc : 0,
+      convRate: cc > 0 ? (cv / cc) * 100 : 0,
+      cpa: cv > 0 ? cs / cv : 0,
+      impressionShare: impShare,
+      topImprShare: topShare,
+      revenue: cv * 2950,
+      roas: cs > 0 ? (cv * 2950) / cs : 0,
+    }
+  }
   const campaigns: any = {
     totals, prevTotals,
     campaigns: [
-      { id: '1', name: 'Autocar Brand - Search', status: 'ENABLED', type: 'SEARCH', spend: spend * 0.35, impressions: Math.round(impressions * 0.28), clicks: Math.round(clicks * 0.42), conversions: Math.round(conversions * 0.50), ctr: 2.05, cpc: (spend * 0.35) / Math.max(1, Math.round(clicks * 0.42)), cpa: (spend * 0.35) / Math.max(1, Math.round(conversions * 0.50)) },
-      { id: '2', name: 'Autocar Servicos - Search POA', status: 'ENABLED', type: 'SEARCH', spend: spend * 0.40, impressions: Math.round(impressions * 0.44), clicks: Math.round(clicks * 0.38), conversions: Math.round(conversions * 0.33), ctr: 1.20, cpc: (spend * 0.40) / Math.max(1, Math.round(clicks * 0.38)), cpa: (spend * 0.40) / Math.max(1, Math.round(conversions * 0.33)) },
-      { id: '3', name: 'Autocar Performance Max', status: 'ENABLED', type: 'PERFORMANCE_MAX', spend: spend * 0.25, impressions: Math.round(impressions * 0.28), clicks: Math.round(clicks * 0.20), conversions: Math.round(conversions * 0.17), ctr: 1.00, cpc: (spend * 0.25) / Math.max(1, Math.round(clicks * 0.20)), cpa: (spend * 0.25) / Math.max(1, Math.round(conversions * 0.17)) },
+      mkCamp('1', 'Autocar Brand - Search', 'SEARCH', 0.35, 0.28, 0.42, 0.50, 84.5, 62.0),
+      mkCamp('2', 'Autocar Servicos - Search POA', 'SEARCH', 0.40, 0.44, 0.38, 0.33, 42.3, 25.4),
+      mkCamp('3', 'Autocar Performance Max', 'PERFORMANCE_MAX', 0.25, 0.28, 0.20, 0.17, 0, 0),
     ],
   }
 
@@ -108,25 +123,37 @@ function makeGuiAutocarGadsData(days: number) {
     } as any
   })
 
+  const mkKw = (kw: string, match: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number, qs: number) => {
+    const cs = spend * sFrac, ci = Math.round(impressions * iFrac), cc = Math.max(1, Math.round(clicks * cFrac)), cv = Math.max(0, Math.round(conversions * cvFrac))
+    return { keyword: kw, matchType: match, clicks: cc, impressions: ci, ctr: ci > 0 ? (cc / ci) * 100 : 0, cpc: cc > 0 ? cs / cc : 0, conversions: cv, spend: cs, qualityScore: qs } as any
+  }
   const keywords: GAdsKeyword[] = [
-    { text: 'mecanica automotiva porto alegre', matchType: 'PHRASE', clicks: Math.round(clicks * 0.18), impressions: Math.round(impressions * 0.12), ctr: 2.1, cpc: 3.2, conversions: Math.round(conversions * 0.22), spend: spend * 0.14, qualityScore: 8 } as any,
-    { text: 'oficina mecanica poa', matchType: 'PHRASE', clicks: Math.round(clicks * 0.12), impressions: Math.round(impressions * 0.09), ctr: 1.9, cpc: 3.5, conversions: Math.round(conversions * 0.15), spend: spend * 0.11, qualityScore: 7 } as any,
-    { text: 'troca de oleo perto de mim', matchType: 'BROAD', clicks: Math.round(clicks * 0.10), impressions: Math.round(impressions * 0.14), ctr: 1.0, cpc: 2.8, conversions: Math.round(conversions * 0.12), spend: spend * 0.08, qualityScore: 6 } as any,
-    { text: 'revisao preventiva carro', matchType: 'PHRASE', clicks: Math.round(clicks * 0.08), impressions: Math.round(impressions * 0.07), ctr: 1.5, cpc: 3.9, conversions: Math.round(conversions * 0.10), spend: spend * 0.09, qualityScore: 7 } as any,
-    { text: 'gui autocar', matchType: 'EXACT', clicks: Math.round(clicks * 0.14), impressions: Math.round(impressions * 0.05), ctr: 3.8, cpc: 1.4, conversions: Math.round(conversions * 0.20), spend: spend * 0.06, qualityScore: 10 } as any,
+    mkKw('gui autocar', 'EXACT', 0.06, 0.05, 0.14, 0.20, 10),
+    mkKw('mecanica automotiva porto alegre', 'PHRASE', 0.14, 0.12, 0.18, 0.22, 8),
+    mkKw('oficina mecanica poa', 'PHRASE', 0.11, 0.09, 0.12, 0.15, 7),
+    mkKw('revisao preventiva carro', 'PHRASE', 0.09, 0.07, 0.08, 0.10, 7),
+    mkKw('troca de oleo perto de mim', 'BROAD', 0.08, 0.14, 0.10, 0.12, 6),
   ]
 
+  const mkTerm = (term: string, camp: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number) => {
+    const cs = spend * sFrac, ci = Math.round(impressions * iFrac), cc = Math.max(1, Math.round(clicks * cFrac)), cv = Math.max(0, Math.round(conversions * cvFrac))
+    return { term, campaign: camp, clicks: cc, impressions: ci, ctr: ci > 0 ? (cc / ci) * 100 : 0, cpc: cc > 0 ? cs / cc : 0, spend: cs, conversions: cv } as any
+  }
   const searchTerms: GAdsSearchTerm[] = [
-    { term: 'oficina mecanica bairro cristo redentor', clicks: Math.round(clicks * 0.09), impressions: Math.round(impressions * 0.06), ctr: 2.0, conversions: Math.round(conversions * 0.10), spend: spend * 0.07 } as any,
-    { term: 'auto mecanica porto alegre orcamento', clicks: Math.round(clicks * 0.07), impressions: Math.round(impressions * 0.05), ctr: 1.8, conversions: Math.round(conversions * 0.09), spend: spend * 0.06 } as any,
-    { term: 'gui autocar telefone', clicks: Math.round(clicks * 0.06), impressions: Math.round(impressions * 0.02), ctr: 4.1, conversions: Math.round(conversions * 0.12), spend: spend * 0.03 } as any,
-    { term: 'oficina carro proximo', clicks: Math.round(clicks * 0.05), impressions: Math.round(impressions * 0.06), ctr: 1.1, conversions: Math.round(conversions * 0.04), spend: spend * 0.05 } as any,
+    mkTerm('gui autocar telefone', 'Autocar Brand - Search', 0.03, 0.02, 0.06, 0.12),
+    mkTerm('oficina mecanica bairro cristo redentor', 'Autocar Servicos - Search POA', 0.07, 0.06, 0.09, 0.10),
+    mkTerm('auto mecanica porto alegre orcamento', 'Autocar Servicos - Search POA', 0.06, 0.05, 0.07, 0.09),
+    mkTerm('oficina carro proximo', 'Autocar Servicos - Search POA', 0.05, 0.06, 0.05, 0.04),
   ]
 
+  const mkDev = (device: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number) => {
+    const cs = spend * sFrac, ci = Math.round(impressions * iFrac), cc = Math.max(1, Math.round(clicks * cFrac)), cv = Math.max(0, Math.round(conversions * cvFrac))
+    return { device, spend: cs, impressions: ci, clicks: cc, conversions: cv, ctr: ci > 0 ? (cc / ci) * 100 : 0, cpc: cc > 0 ? cs / cc : 0, convRate: cc > 0 ? (cv / cc) * 100 : 0 } as any
+  }
   const devices: GAdsDevice[] = [
-    { device: 'MOBILE', spend: spend * 0.62, clicks: Math.round(clicks * 0.68), impressions: Math.round(impressions * 0.71), conversions: Math.round(conversions * 0.55) } as any,
-    { device: 'DESKTOP', spend: spend * 0.30, clicks: Math.round(clicks * 0.26), impressions: Math.round(impressions * 0.23), conversions: Math.round(conversions * 0.38) } as any,
-    { device: 'TABLET', spend: spend * 0.08, clicks: Math.round(clicks * 0.06), impressions: Math.round(impressions * 0.06), conversions: Math.round(conversions * 0.07) } as any,
+    mkDev('MOBILE', 0.62, 0.71, 0.68, 0.55),
+    mkDev('DESKTOP', 0.30, 0.23, 0.26, 0.38),
+    mkDev('TABLET', 0.08, 0.06, 0.06, 0.07),
   ]
 
   const hourly: GAdsHourly[] = Array.from({ length: 24 }, (_, h) => {
