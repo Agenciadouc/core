@@ -178,14 +178,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const custoLead = m.leads > 0 && adSpend ? adSpend / m.leads : 10
   const custoQualif = m.qualSim > 0 && adSpend ? adSpend / m.qualSim : 25
 
-  // Distribuicao por canal Meta (Instagram + Facebook + WhatsApp + Form)
-  const canaisMeta = [
-    { name: 'Instagram / Direct', frac: 0.52 },
-    { name: 'WhatsApp', frac: 0.30 },
-    { name: 'Formulario', frac: 0.14 },
-    { name: 'Facebook feed', frac: 0.04 },
-  ]
-
   return (
     <div className="crm-section">
       <section className="dash-section">
@@ -203,43 +195,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
         </div>
       </section>
 
-      <section className="dash-section">
-        <div className="table-card">
-          <div className="table-header"><h3>Leads Meta por Canal <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="campaign-table">
-              <thead>
-                <tr>
-                  <th>Canal</th>
-                  <th className="right">Leads</th>
-                  <th className="right">SIM</th>
-                  <th className="right">Vendas</th>
-                  <th className="right">Faturamento</th>
-                  <th className="right">% Qualif.</th>
-                </tr>
-              </thead>
-              <tbody>
-                {canaisMeta.map(c => {
-                  const cLeads = Math.round(m.leads * c.frac)
-                  const cSim = Math.round(cLeads * (m.qualSim / Math.max(1, m.leads)))
-                  const cVendas = Math.round(cSim * (m.vendas / Math.max(1, m.qualSim)))
-                  const cFat = cVendas * proj.ticket
-                  return (
-                    <tr key={c.name}>
-                      <td className="name">{c.name}</td>
-                      <td className="right" style={{ fontWeight: 600, color: '#fff' }}>{cLeads}</td>
-                      <td className="right" style={{ color: '#34C759' }}>{cSim}</td>
-                      <td className="right" style={{ color: '#5DADE2' }}>{cVendas}</td>
-                      <td className="right" style={{ color: '#34C759', fontWeight: 600 }}>{formatBRL(cFat)}</td>
-                      <td className="right"><span className="change-badge positive">{cLeads > 0 ? ((cSim / cLeads) * 100).toFixed(0) : 0}%</span></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </section>
     </div>
   )
 }
