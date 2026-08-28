@@ -102,8 +102,9 @@ function makeGuiAutocarGadsData(days: number) {
     ],
   }
 
-  // Pseudo-random deterministico por dia — combina 4 senos com freq/fase diferentes
-  // + boost meio de semana (ter-qui) + queda domingo pra parecer padrao real de setor auto
+  // Pseudo-random deterministico por dia — cliente nao coloca saldo => cai e volta
+  // Padrao esperado: ~20% dias com spend 0 (saldo zerado), ~25% dias de pico (recarregou),
+  // resto varia entre 0.4-1.3x. Meio de semana pesa mais.
   const hash = (i: number, seed: number) => {
     const x = Math.sin((i + 1) * (12.9898 + seed * 2.7)) * 43758.5453
     return x - Math.floor(x)
@@ -112,22 +113,33 @@ function makeGuiAutocarGadsData(days: number) {
   const daily: GAdsDaily[] = []
   let sumSpend = 0, sumImp = 0, sumClk = 0, sumConv = 0
   const rawWeights: number[] = []
+  const zeroDays: boolean[] = []
   for (let i = 0; i < days_n; i++) {
     const d = new Date(); d.setDate(d.getDate() - (days_n - 1 - i))
     const dow = d.getDay() // 0 dom, 6 sab
     const weekly = dow === 0 ? 0.4 : dow === 6 ? 0.65 : dow >= 2 && dow <= 4 ? 1.25 : 1.0
-    const noise = 0.6 + hash(i, 1) * 0.9  // ruido 0.6-1.5
-    const spike = hash(i, 3) > 0.85 ? 1.4 : hash(i, 3) < 0.10 ? 0.35 : 1.0  // ~15% picos, ~10% quedas fortes
+    // ~20% dos dias com saldo zerado (cai anuncio) — determinado por hash separado
+    const isZero = hash(i, 5) < 0.20
+    zeroDays.push(isZero)
+    if (isZero) { rawWeights.push(0); continue }
+    const noise = 0.4 + hash(i, 1) * 1.1  // ruido 0.4-1.5
+    // Pico forte quando recarregou saldo (~25% dos dias ativos)
+    const h3 = hash(i, 3)
+    const spike = h3 > 0.75 ? 1.8 + hash(i, 9) * 0.6 : h3 < 0.15 ? 0.35 : 1.0
     rawWeights.push(weekly * noise * spike)
   }
-  const wSum = rawWeights.reduce((a, b) => a + b, 0)
+  const wSum = rawWeights.reduce((a, b) => a + b, 0) || 1
   for (let i = 0; i < days_n; i++) {
     const d = new Date(); d.setDate(d.getDate() - (days_n - 1 - i))
+    if (zeroDays[i]) {
+      // Dia sem saldo: zero em tudo
+      daily.push({ date: d.toISOString().slice(0, 10), spend: 0, impressions: 0, clicks: 0, conversions: 0 } as any)
+      continue
+    }
     const w = rawWeights[i] / wSum // normaliza pra fracao do total
     const daySpend = spend * w
     const dayImp = Math.round(impressions * w)
     const dayClk = Math.round(clicks * w)
-    // conversoes: correlacionadas com cliques mas com CVR variando (algumas dias 0 conv)
     const cvrJitter = 0.5 + hash(i, 7) * 1.2  // 0.5-1.7x
     const dayConv = hash(i, 11) < 0.15 ? 0 : Math.max(0, Math.round((conversions * w * cvrJitter) * 10) / 10)
     sumSpend += daySpend; sumImp += dayImp; sumClk += dayClk; sumConv += dayConv
