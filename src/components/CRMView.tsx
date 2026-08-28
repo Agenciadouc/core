@@ -168,16 +168,16 @@ function KellermannCRM({ data, days, adSpend }: { data: CRMData; days: number; a
 }
 
 // ========== GUI AUTOCAR CRM (dados projetados) ==========
-// Baseline historico: 150 leads/mes, ticket medio R$ 5.900, ~15 vendas/mes = R$ 89k faturamento
-// Custo por lead ~R$ 10. Escalao com adSpend real do periodo.
+// Baseline historico: 150 leads/mes, ticket medio R$ 2.950, ~33 vendas/mes = R$ 96k+ faturamento
+// Custo por lead ~R$ 10. Escala com adSpend real do periodo.
 function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const daysScale = Math.max(days, 1) / 30
   const LEADS_BASELINE_30D = 150
   const COST_PER_LEAD = 10
-  const TICKET_MEDIO = 5900
-  const QUAL_RATE = 0.30   // 30% dos leads viram qualificados
-  const MEIO_RATE = 0.12   // 12% ficam meio termo
-  const CLOSE_RATE = 0.333 // 33% dos qualificados fecham venda
+  const TICKET_MEDIO = 2950
+  const QUAL_RATE = 0.40   // 40% dos leads viram qualificados
+  const MEIO_RATE = 0.15   // 15% ficam meio termo
+  const CLOSE_RATE = 0.55  // 55% dos qualificados fecham venda
 
   // Leads: usa o maior entre baseline projetado e o que o spend indica (mais gasto = mais leads)
   const leadsBaseline = Math.round(LEADS_BASELINE_30D * daysScale)
@@ -216,26 +216,26 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   return (
     <div className="crm-section">
       <section className="dash-section">
-        <div className="section-title">CRM — Leads ({days} dias)</div>
+        <div className="section-title">CRM — Leads ({days} dias) <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· dados estimados</span></div>
         <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          <Stat label="Total de Leads" value={totalLeads} sub={`Ultimos ${days} dias`} icon={<Users size={16} />} color="#FFB300" />
-          <Stat label="Qualificados (SIM)" value={qualSim} sub={`${qualRate}% do total`} icon={<UserCheck size={16} />} color="#34C759" />
-          <Stat label="Meio Termo" value={qualMeio} sub={`${totalLeads > 0 ? ((qualMeio / totalLeads) * 100).toFixed(0) : 0}%`} icon={<Users size={16} />} color="#FFB300" />
-          <Stat label="Nao Qualificados" value={qualNao} sub={`${totalLeads > 0 ? ((qualNao / totalLeads) * 100).toFixed(0) : 0}%`} icon={<UserX size={16} />} color="#FFAA83" />
-          <Stat label="Custo por Lead" value={formatBRL(custoLead)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${totalLeads} leads` : `estimado`} icon={<TrendingDown size={16} />} color="#FFAA83" />
-          <Stat label="Custo por Lead Qualif." value={formatBRL(custoQualif)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${qualSim} qualif.` : `estimado`} icon={<UserCheck size={16} />} color="#34C759" />
-          <Stat label="Vendas Fechadas" value={vendas} sub={`${qualSim > 0 ? ((vendas / qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#34C759" />
-          <Stat label="Ticket Medio" value={formatBRL(TICKET_MEDIO)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
-          <Stat label="Faturamento" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
+          <Stat label="Total de Leads (estimativa)" value={totalLeads} sub={`Ultimos ${days} dias`} icon={<Users size={16} />} color="#FFB300" />
+          <Stat label="Qualificados SIM (estimativa)" value={qualSim} sub={`${qualRate}% do total`} icon={<UserCheck size={16} />} color="#34C759" />
+          <Stat label="Meio Termo (estimativa)" value={qualMeio} sub={`${totalLeads > 0 ? ((qualMeio / totalLeads) * 100).toFixed(0) : 0}%`} icon={<Users size={16} />} color="#FFB300" />
+          <Stat label="Nao Qualificados (estimativa)" value={qualNao} sub={`${totalLeads > 0 ? ((qualNao / totalLeads) * 100).toFixed(0) : 0}%`} icon={<UserX size={16} />} color="#FFAA83" />
+          <Stat label="Custo por Lead (estimativa)" value={formatBRL(custoLead)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${totalLeads} leads` : `estimado`} icon={<TrendingDown size={16} />} color="#FFAA83" />
+          <Stat label="Custo por Lead Qualif. (estimativa)" value={formatBRL(custoQualif)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${qualSim} qualif.` : `estimado`} icon={<UserCheck size={16} />} color="#34C759" />
+          <Stat label="Vendas Fechadas (estimativa)" value={vendas} sub={`${qualSim > 0 ? ((vendas / qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#34C759" />
+          <Stat label="Ticket Medio (estimativa)" value={formatBRL(TICKET_MEDIO)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
+          <Stat label="Faturamento (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
           {roas !== null && (
-            <Stat label="ROAS" value={`${roas.toFixed(1)}x`} sub={`${formatBRL(faturamento)} / ${formatBRL(adSpend || 0)}`} icon={<TrendingUp size={16} />} color="#5DADE2" />
+            <Stat label="ROAS (estimativa)" value={`${roas.toFixed(1)}x`} sub={`${formatBRL(faturamento)} / ${formatBRL(adSpend || 0)}`} icon={<TrendingUp size={16} />} color="#5DADE2" />
           )}
         </div>
       </section>
 
       <section className="dash-section">
         <div className="table-card">
-          <div className="table-header"><h3>Leads por Atendente</h3></div>
+          <div className="table-header"><h3>Leads por Atendente <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
           <div style={{ overflowX: 'auto' }}>
             <table className="campaign-table">
               <thead>
@@ -273,7 +273,7 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
 
       <section className="dash-section">
         <div className="table-card">
-          <div className="table-header"><h3>Leads por Canal</h3></div>
+          <div className="table-header"><h3>Leads por Canal <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
           <div style={{ overflowX: 'auto' }}>
             <table className="campaign-table">
               <thead>
