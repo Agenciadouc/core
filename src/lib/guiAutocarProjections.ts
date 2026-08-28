@@ -16,11 +16,11 @@ export const GA_PROJ = {
   googleMeioRate: 0.17,
   googleCloseRate: 0.36, // 50 * 0.32 * 0.36 = 5.8 vendas/mes -> R$17.907
   googleCostPerLead: 16.30,
-  // Baseline semanal Google Ads (spend mais alto pra mostrar mais volume)
-  googleSpendPerWeek: 342.80,
-  googleImpressionsPerWeek: 11380,
-  googleClicksPerWeek: 171,
-  googleConversionsPerWeek: 19,
+  // Baseline semanal Google Ads (aumento leve do baseline anterior)
+  googleSpendPerWeek: 247.50,
+  googleImpressionsPerWeek: 9040,
+  googleClicksPerWeek: 138,
+  googleConversionsPerWeek: 15,
 } as const
 
 export interface GAFunnelSide {
