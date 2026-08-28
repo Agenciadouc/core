@@ -174,9 +174,9 @@ function makeGuiAutocarGadsData(days: number) {
     return { device, spend: cs, impressions: ci, clicks: cc, conversions: cv, ctr: ci > 0 ? (cc / ci) * 100 : 0, cpc: cc > 0 ? cs / cc : 0, convRate: cc > 0 ? (cv / cc) * 100 : 0 } as any
   }
   const devices: GAdsDevice[] = [
-    mkDev('MOBILE', 0.62, 0.71, 0.68, 0.55),
-    mkDev('DESKTOP', 0.30, 0.23, 0.26, 0.38),
-    mkDev('TABLET', 0.08, 0.06, 0.06, 0.07),
+    mkDev('MOBILE', 0.95, 0.94, 0.95, 0.94),
+    mkDev('DESKTOP', 0.04, 0.05, 0.04, 0.05),
+    mkDev('TABLET', 0.01, 0.01, 0.01, 0.01),
   ]
 
   const hourly: GAdsHourly[] = Array.from({ length: 24 }, (_, h) => {
@@ -311,7 +311,7 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
               current={t.conversions} previous={pt?.conversions} sub={`Taxa: ${t.convRate.toFixed(2)}%`} />
             <KPI label="CPA" value={formatBRL(t.cpa)} icon={<DollarSign size={16} />} color="#EA4335"
               current={t.cpa} previous={pt?.cpa} invert />
-            {t.roas > 0 && (
+            {t.roas > 0 && !isGuiAutocar && (
               <KPI label="ROAS" value={`${t.roas.toFixed(2)}x`} icon={<TrendingUp size={16} />}
                 color={t.roas >= 2 ? '#34A853' : t.roas >= 1 ? '#FBBC04' : '#EA4335'}
                 current={t.roas} previous={pt?.roas} sub={`Receita: ${formatBRL(t.revenue)}`} />
