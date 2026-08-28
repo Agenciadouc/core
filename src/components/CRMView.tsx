@@ -5,6 +5,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area,
 } from 'recharts'
 import { Users, UserCheck, Phone, Eye, Home, Key, AlertTriangle, TrendingUp, TrendingDown, UserX, ArrowRight, MapPin, ShoppingCart } from 'lucide-react'
+import { getGuiAutocarProjection } from '../lib/guiAutocarProjections'
 
 interface Props {
   accountId: string
@@ -167,71 +168,44 @@ function KellermannCRM({ data, days, adSpend }: { data: CRMData; days: number; a
   )
 }
 
-// ========== GUI AUTOCAR CRM (dados projetados) ==========
-// Baseline: 190 leads/mes (150 Meta + 40 Google), ticket R$ 2.950, ~42 vendas/mes
-// Vendas dividas 65% Meta / 35% Google. Escala com adSpend real do periodo.
+// ========== GUI AUTOCAR CRM (Meta Ads apenas) ==========
+// Mostra so o funil de LEADS oriundos de Meta. Aba Google Ads tem seu proprio CRM.
+// A aba Geral agrega Meta + Google. Fonte unica em lib/guiAutocarProjections.
 function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
-  const daysScale = Math.max(days, 1) / 30
-  const LEADS_BASELINE_30D = 190  // 150 Meta + 40 Google
-  const COST_PER_LEAD = 10
-  const TICKET_MEDIO = 2950
-  const QUAL_RATE = 0.40   // 40% dos leads viram qualificados
-  const MEIO_RATE = 0.15   // 15% ficam meio termo
-  const CLOSE_RATE = 0.33  // 33% dos qualificados fecham venda (alvo R$70k/mes)
-  const META_SHARE = 0.65  // % das vendas atribuidas a Meta
-  const GOOGLE_SHARE = 0.35
+  const proj = getGuiAutocarProjection(days, adSpend)
+  const m = proj.meta
+  const qualRate = m.leads > 0 ? ((m.qualSim / m.leads) * 100).toFixed(1) : '0'
+  const custoLead = m.leads > 0 && adSpend ? adSpend / m.leads : 10
+  const custoQualif = m.qualSim > 0 && adSpend ? adSpend / m.qualSim : 25
 
-  // Leads: usa o maior entre baseline projetado e o que o spend indica (mais gasto = mais leads)
-  const leadsBaseline = Math.round(LEADS_BASELINE_30D * daysScale)
-  const leadsFromSpend = adSpend ? Math.round(adSpend / COST_PER_LEAD) : 0
-  const totalLeads = Math.max(leadsBaseline, leadsFromSpend)
-
-  const qualSim = Math.round(totalLeads * QUAL_RATE)
-  const qualMeio = Math.round(totalLeads * MEIO_RATE)
-  const qualNao = Math.max(0, totalLeads - qualSim - qualMeio)
-  const vendas = Math.round(qualSim * CLOSE_RATE)
-  const vendasMeta = Math.round(vendas * META_SHARE)
-  const vendasGoogle = vendas - vendasMeta
-  const faturamento = vendas * TICKET_MEDIO
-  const fatMeta = vendasMeta * TICKET_MEDIO
-  const fatGoogle = vendasGoogle * TICKET_MEDIO
-  const qualRate = totalLeads > 0 ? ((qualSim / totalLeads) * 100).toFixed(1) : '0'
-  const custoLead = totalLeads > 0 && adSpend ? adSpend / totalLeads : COST_PER_LEAD
-  const custoQualif = qualSim > 0 && adSpend ? adSpend / qualSim : COST_PER_LEAD / QUAL_RATE
-
-  // Distribuicao por canal
-  const canais = [
-    { name: 'Instagram / Direct', frac: 0.42 },
-    { name: 'WhatsApp', frac: 0.28 },
-    { name: 'Formulario', frac: 0.18 },
-    { name: 'Google / Site', frac: 0.08 },
-    { name: 'Indicacao', frac: 0.04 },
+  // Distribuicao por canal Meta (Instagram + Facebook + WhatsApp + Form)
+  const canaisMeta = [
+    { name: 'Instagram / Direct', frac: 0.52 },
+    { name: 'WhatsApp', frac: 0.30 },
+    { name: 'Formulario', frac: 0.14 },
+    { name: 'Facebook feed', frac: 0.04 },
   ]
 
   return (
     <div className="crm-section">
       <section className="dash-section">
-        <div className="section-title">CRM — Leads ({days} dias) <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· dados estimados</span></div>
+        <div className="section-title">CRM — Leads via Meta ({days} dias) <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa · so leads atribuidos a Meta Ads</span></div>
         <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-          <Stat label="Total de Leads (estimativa)" value={totalLeads} sub={`Ultimos ${days} dias`} icon={<Users size={16} />} color="#FFB300" />
-          <Stat label="Qualificados SIM (estimativa)" value={qualSim} sub={`${qualRate}% do total`} icon={<UserCheck size={16} />} color="#34C759" />
-          <Stat label="Meio Termo (estimativa)" value={qualMeio} sub={`${totalLeads > 0 ? ((qualMeio / totalLeads) * 100).toFixed(0) : 0}%`} icon={<Users size={16} />} color="#FFB300" />
-          <Stat label="Nao Qualificados (estimativa)" value={qualNao} sub={`${totalLeads > 0 ? ((qualNao / totalLeads) * 100).toFixed(0) : 0}%`} icon={<UserX size={16} />} color="#FFAA83" />
-          <Stat label="Custo por Lead (estimativa)" value={formatBRL(custoLead)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${totalLeads} leads` : `estimado`} icon={<TrendingDown size={16} />} color="#FFAA83" />
-          <Stat label="Custo por Lead Qualif. (estimativa)" value={formatBRL(custoQualif)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${qualSim} qualif.` : `estimado`} icon={<UserCheck size={16} />} color="#34C759" />
-          <Stat label="Vendas Fechadas (estimativa)" value={vendas} sub={`${qualSim > 0 ? ((vendas / qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#34C759" />
-          <Stat label="Vendas via Meta (estimativa)" value={vendasMeta} sub={`${Math.round(META_SHARE*100)}% das vendas`} icon={<ShoppingCart size={16} />} color="#1877F2" />
-          <Stat label="Vendas via Google (estimativa)" value={vendasGoogle} sub={`${Math.round(GOOGLE_SHARE*100)}% das vendas`} icon={<ShoppingCart size={16} />} color="#4285F4" />
-          <Stat label="Ticket Medio (estimativa)" value={formatBRL(TICKET_MEDIO)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
-          <Stat label="Faturamento Meta (estimativa)" value={formatBRL(fatMeta)} sub={`${vendasMeta} vendas`} icon={<TrendingUp size={16} />} color="#1877F2" />
-          <Stat label="Faturamento Google (estimativa)" value={formatBRL(fatGoogle)} sub={`${vendasGoogle} vendas`} icon={<TrendingUp size={16} />} color="#4285F4" />
-          <Stat label="Faturamento Total (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
+          <Stat label="Leads via Meta (estimativa)" value={m.leads} sub={`Ultimos ${days} dias`} icon={<Users size={16} />} color="#1877F2" />
+          <Stat label="Qualificados SIM (estimativa)" value={m.qualSim} sub={`${qualRate}% do total`} icon={<UserCheck size={16} />} color="#34C759" />
+          <Stat label="Meio Termo (estimativa)" value={m.qualMeio} sub={`${m.leads > 0 ? ((m.qualMeio / m.leads) * 100).toFixed(0) : 0}%`} icon={<Users size={16} />} color="#FFB300" />
+          <Stat label="Nao Qualificados (estimativa)" value={m.qualNao} sub={`${m.leads > 0 ? ((m.qualNao / m.leads) * 100).toFixed(0) : 0}%`} icon={<UserX size={16} />} color="#FFAA83" />
+          <Stat label="Custo por Lead Meta" value={formatBRL(custoLead)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${m.leads} leads` : `estimado`} icon={<TrendingDown size={16} />} color="#FFAA83" />
+          <Stat label="Custo por Lead Qualif." value={formatBRL(custoQualif)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${m.qualSim} qualif.` : `estimado`} icon={<UserCheck size={16} />} color="#34C759" />
+          <Stat label="Vendas via Meta (estimativa)" value={m.vendas} sub={`${m.qualSim > 0 ? ((m.vendas / m.qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#1877F2" />
+          <Stat label="Ticket Medio" value={formatBRL(proj.ticket)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
+          <Stat label="Faturamento Meta (estimativa)" value={formatBRL(m.faturamento)} sub={`${m.vendas} vendas x ${formatBRL(proj.ticket)}`} icon={<TrendingUp size={16} />} color="#1877F2" />
         </div>
       </section>
 
       <section className="dash-section">
         <div className="table-card">
-          <div className="table-header"><h3>Leads por Canal <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
+          <div className="table-header"><h3>Leads Meta por Canal <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
           <div style={{ overflowX: 'auto' }}>
             <table className="campaign-table">
               <thead>
@@ -245,11 +219,11 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
                 </tr>
               </thead>
               <tbody>
-                {canais.map(c => {
-                  const cLeads = Math.round(totalLeads * c.frac)
-                  const cSim = Math.round(cLeads * QUAL_RATE)
-                  const cVendas = Math.round(cSim * CLOSE_RATE)
-                  const cFat = cVendas * TICKET_MEDIO
+                {canaisMeta.map(c => {
+                  const cLeads = Math.round(m.leads * c.frac)
+                  const cSim = Math.round(cLeads * (m.qualSim / Math.max(1, m.leads)))
+                  const cVendas = Math.round(cSim * (m.vendas / Math.max(1, m.qualSim)))
+                  const cFat = cVendas * proj.ticket
                   return (
                     <tr key={c.name}>
                       <td className="name">{c.name}</td>

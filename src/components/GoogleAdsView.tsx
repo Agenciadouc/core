@@ -13,7 +13,9 @@ import {
 import {
   DollarSign, MousePointerClick, Eye, Target, TrendingUp, TrendingDown,
   Search as SearchIcon, Monitor, Smartphone, Tablet, Award, Clock,
+  Users, UserCheck, UserX, ShoppingCart,
 } from 'lucide-react'
+import { getGuiAutocarProjection } from '../lib/guiAutocarProjections'
 
 interface Props {
   accountName: string
@@ -67,21 +69,10 @@ function KPI({ label, value, icon, color, current, previous, invert, sub }: {
   )
 }
 
-// Gera dados projetados Google Ads pra Gui Autocar (baseline 200/semana, ticket R$2.950)
+// Gera dados projetados Google Ads pra Gui Autocar (mesma fonte do helper)
 function makeGuiAutocarGadsData(days: number) {
-  const weeks = Math.max(days, 1) / 7
-  const spend = Math.round(200 * weeks * 100) / 100
-  const impressions = Math.round(8000 * weeks)
-  const clicks = Math.round(110 * weeks)
-  const conversions = Math.round(12 * weeks)
-  const cpc = clicks > 0 ? spend / clicks : 0
-  const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0
-  const convRate = clicks > 0 ? (conversions / clicks) * 100 : 0
-  const cpa = conversions > 0 ? spend / conversions : 0
-  // Receita = vendas fechadas via Google (~18% das conversoes viram venda) x ticket R$2.950
-  const vendasGoogle = conversions * 0.18
-  const revenue = vendasGoogle * 2950
-  const roas = spend > 0 ? revenue / spend : 0
+  const proj = getGuiAutocarProjection(days)
+  const { spend, impressions, clicks, conversions, ctr, cpc, convRate, cpa, revenue, roas } = proj.gads
 
   const account: GAdsAccount = { id: '5082579991', name: 'Gui Autocar Mecanica', currency: 'BRL', status: 'ENABLED' } as any
   const totals: any = { spend, impressions, clicks, ctr, cpc, conversions, convRate, cpa, revenue, roas, avgQualityScore: 7.2 }
@@ -620,6 +611,31 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
           </div>
         </section>
       )}
+
+      {/* CRM Google (Gui Autocar - so leads/vendas atribuidos ao Google Ads) */}
+      {isGuiAutocar && (() => {
+        const g = getGuiAutocarProjection(days).google
+        const p = getGuiAutocarProjection(days)
+        const custoLead = g.leads > 0 ? p.gads.spend / g.leads : 0
+        const custoQualif = g.qualSim > 0 ? p.gads.spend / g.qualSim : 0
+        const cpaVenda = g.vendas > 0 ? p.gads.spend / g.vendas : 0
+        return (
+          <section className="dash-section">
+            <div className="section-title">CRM — Leads via Google ({days} dias) <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa · so leads atribuidos a Google Ads</span></div>
+            <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
+              <div className="metric-card"><div className="metric-label">Leads via Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{g.leads}</div><div className="metric-sub">Ultimos {days} dias</div></div>
+              <div className="metric-card"><div className="metric-label">Qualificados SIM (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34C759' }}>{g.qualSim}</div><div className="metric-sub">{g.leads > 0 ? ((g.qualSim / g.leads) * 100).toFixed(0) : 0}% do total</div></div>
+              <div className="metric-card"><div className="metric-label">Meio Termo (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#FBBC04' }}>{g.qualMeio}</div></div>
+              <div className="metric-card"><div className="metric-label">Nao Qualificados (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#EA4335' }}>{g.qualNao}</div></div>
+              <div className="metric-card"><div className="metric-label">Custo por Lead Google</div><div className="metric-value" style={{ fontSize: 20 }}>{formatBRL(custoLead)}</div><div className="metric-sub">{formatBRL(p.gads.spend)} / {g.leads} leads</div></div>
+              <div className="metric-card"><div className="metric-label">Custo por Lead Qualif.</div><div className="metric-value" style={{ fontSize: 20 }}>{formatBRL(custoQualif)}</div><div className="metric-sub">{formatBRL(p.gads.spend)} / {g.qualSim} qualif.</div></div>
+              <div className="metric-card"><div className="metric-label">Vendas via Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{g.vendas}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVenda)}</div></div>
+              <div className="metric-card"><div className="metric-label">Ticket Medio</div><div className="metric-value" style={{ fontSize: 20 }}>{formatBRL(p.ticket)}</div></div>
+              <div className="metric-card"><div className="metric-label">Faturamento Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34A853', fontWeight: 700 }}>{formatBRL(g.faturamento)}</div><div className="metric-sub">{g.vendas} vendas x {formatBRL(p.ticket)}</div></div>
+            </div>
+          </section>
+        )
+      })()}
     </div>
   )
 }

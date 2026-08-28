@@ -7,6 +7,7 @@ import { fetchOverview, formatBRL, formatNumber, pctChange, type OverviewData } 
 import { RefreshCw, Settings2, Check, X, TrendingUp, TrendingDown, DollarSign, Target, MessageCircle, ShoppingCart, BarChart3, Globe, Instagram, AlertTriangle } from 'lucide-react'
 import { clearApiCache, saveDashboardConfig, fetchDashboardConfig, type DashboardConfig, DEFAULT_CONFIG } from '../lib/dashboardConfig'
 import ConversionActionsPicker from './ConversionActionsPicker'
+import { getGuiAutocarProjection } from '../lib/guiAutocarProjections'
 import { ResponsiveContainer, ComposedChart, Area, Bar, XAxis, YAxis, CartesianGrid, Tooltip } from 'recharts'
 
 interface Props {
@@ -187,28 +188,21 @@ export default function OverviewView({ accountId, accountName, days, since, unti
   const isGuiAutocar = nameLower.includes('autocar') || nameLower.includes('gui auto')
 
   // Gui Autocar: injeta dados projetados Google Ads + CRM (baseline 200/semana, ticket R$2.950)
-  if (isGuiAutocar) {
-    const weeks = Math.max(days, 1) / 7
-    const daysScale = Math.max(days, 1) / 30
-    const gSpend = Math.round(200 * weeks * 100) / 100
-    const gImpressions = Math.round(8000 * weeks)
-    const gClicks = Math.round(110 * weeks)
-    const gConversions = Math.round(12 * weeks)
-    // CRM projetado: 190 leads/mes baseline (150 Meta + 40 Google), 40% qualif, 33% close, 35% via Google
-    const totalLeads = Math.round(190 * daysScale)
-    const qualSim = Math.round(totalLeads * 0.40)
-    const qualMeio = Math.round(totalLeads * 0.15)
-    const qualNao = Math.max(0, totalLeads - qualSim - qualMeio)
-    const vendasTot = Math.round(qualSim * 0.33)
-    const vendasGoogle = vendasTot - Math.round(vendasTot * 0.65)
-    // Receita Google = vendas atribuidas ao Google x ticket medio (nao conversoes brutas)
-    const gRevenue = vendasGoogle * 2950
+  const _guiProj = isGuiAutocar ? getGuiAutocarProjection(days, s.meta?.spend) : null
+  if (isGuiAutocar && _guiProj) {
+    const g = _guiProj.gads
     s.gads = {
-      spend: gSpend, impressions: gImpressions, clicks: gClicks, conversions: gConversions, revenue: gRevenue,
-      prevSpend: gSpend * 0.85, prevConversions: gConversions * 0.83,
+      spend: g.spend, impressions: g.impressions, clicks: g.clicks, conversions: g.conversions, revenue: g.revenue,
+      prevSpend: g.spend * 0.85, prevConversions: g.conversions * 0.83,
       customerId: '5082579991',
     }
-    s.crm = { qualSim, qualNao, qualMeio, total: totalLeads }
+    // CRM total (Meta + Google agregados) — bate com soma das abas Meta e Google
+    s.crm = {
+      qualSim: _guiProj.total.qualSim,
+      qualNao: _guiProj.total.qualNao,
+      qualMeio: _guiProj.total.qualMeio,
+      total: _guiProj.total.leads,
+    }
   }
 
   const hasMeta = !!s.meta
@@ -513,30 +507,22 @@ export default function OverviewView({ accountId, accountName, days, since, unti
         </section>
       )}
 
-      {/* Vendas & Faturamento (Gui Autocar - estimativa dividida Meta/Google) */}
-      {isGuiAutocar && hasCRM && (() => {
-        const TICKET = 2950
-        const CLOSE = 0.33
-        const vendasTot = Math.round(s.crm!.qualSim * CLOSE)
-        // Divide vendas por proporcao de leads gerados por cada canal (Meta 79%, Google 21% do baseline 190)
-        const vendasMeta = Math.round(vendasTot * 0.65)
-        const vendasGoogle = vendasTot - vendasMeta
-        const fatMeta = vendasMeta * TICKET
-        const fatGoogle = vendasGoogle * TICKET
-        const fatTot = fatMeta + fatGoogle
-        const cpaVendaMeta = vendasMeta > 0 ? spendMeta / vendasMeta : 0
-        const cpaVendaGoogle = vendasGoogle > 0 ? spendGads / vendasGoogle : 0
+      {/* Vendas & Faturamento (Gui Autocar - agregado Meta + Google usando fonte unica) */}
+      {isGuiAutocar && _guiProj && (() => {
+        const p = _guiProj
+        const cpaVendaMeta = p.meta.vendas > 0 ? spendMeta / p.meta.vendas : 0
+        const cpaVendaGoogle = p.google.vendas > 0 ? spendGads / p.google.vendas : 0
         return (
           <section className="dash-section">
-            <div className="section-title">Vendas & faturamento <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa (ticket medio R$ 2.950 · 33% fechamento dos qualificados)</span></div>
+            <div className="section-title">Vendas & faturamento <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa (ticket medio {formatBRL(p.ticket)} · Meta 32% close · Google 35% close)</span></div>
             <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
-              <div className="metric-card"><div className="metric-label">Vendas Meta (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#1877F2' }}>{vendasMeta}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaMeta)}</div></div>
-              <div className="metric-card"><div className="metric-label">Vendas Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{vendasGoogle}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaGoogle)}</div></div>
-              <div className="metric-card"><div className="metric-label">Vendas total (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34C759' }}>{vendasTot}</div><div className="metric-sub">Meta + Google</div></div>
-              <div className="metric-card"><div className="metric-label">Ticket medio (estimativa)</div><div className="metric-value" style={{ fontSize: 20 }}>{formatBRL(TICKET)}</div><div className="metric-sub">Historico</div></div>
-              <div className="metric-card"><div className="metric-label">Faturamento Meta (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#1877F2' }}>{formatBRL(fatMeta)}</div></div>
-              <div className="metric-card"><div className="metric-label">Faturamento Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{formatBRL(fatGoogle)}</div></div>
-              <div className="metric-card"><div className="metric-label">Faturamento total (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34C759', fontWeight: 700 }}>{formatBRL(fatTot)}</div><div className="metric-sub">{vendasTot} vendas x {formatBRL(TICKET)}</div></div>
+              <div className="metric-card"><div className="metric-label">Vendas Meta (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#1877F2' }}>{p.meta.vendas}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaMeta)}</div></div>
+              <div className="metric-card"><div className="metric-label">Vendas Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{p.google.vendas}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaGoogle)}</div></div>
+              <div className="metric-card"><div className="metric-label">Vendas total (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34C759' }}>{p.total.vendas}</div><div className="metric-sub">Meta + Google</div></div>
+              <div className="metric-card"><div className="metric-label">Ticket medio</div><div className="metric-value" style={{ fontSize: 20 }}>{formatBRL(p.ticket)}</div><div className="metric-sub">Historico</div></div>
+              <div className="metric-card"><div className="metric-label">Faturamento Meta (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#1877F2' }}>{formatBRL(p.meta.faturamento)}</div></div>
+              <div className="metric-card"><div className="metric-label">Faturamento Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{formatBRL(p.google.faturamento)}</div></div>
+              <div className="metric-card"><div className="metric-label">Faturamento total (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#34C759', fontWeight: 700 }}>{formatBRL(p.total.faturamento)}</div><div className="metric-sub">{p.total.vendas} vendas x {formatBRL(p.ticket)}</div></div>
             </div>
           </section>
         )
