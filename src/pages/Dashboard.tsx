@@ -427,14 +427,16 @@ export default function Dashboard() {
                         </div>
                       )}
                       <div className="perf-grid">
-                        <div className="chart-card">
-                          <SpendChart
-                            currentData={dailyCompare?.current || []}
-                            previousData={dailyCompare?.previous || []}
-                            defaultMetric={config.chartDefaultMetric}
-                            availableMetrics={config.chartAvailableMetrics}
-                          />
-                        </div>
+                        {!(selectedAccount?.name || '').toLowerCase().match(/autocar|gui auto/) && (
+                          <div className="chart-card">
+                            <SpendChart
+                              currentData={dailyCompare?.current || []}
+                              previousData={dailyCompare?.previous || []}
+                              defaultMetric={config.chartDefaultMetric}
+                              availableMetrics={config.chartAvailableMetrics}
+                            />
+                          </div>
+                        )}
                         <div className="chart-card">
                           <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14, letterSpacing: '.02em' }}>Funil</h3>
                           <FunnelChart insight={current} steps={config.funnel} />

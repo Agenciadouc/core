@@ -365,8 +365,8 @@ export default function OverviewView({ accountId, accountName, days, since, unti
       <section className="dash-section">
         <div className="section-title">Desempenho</div>
         <div className="perf-grid">
-          {/* Grafico Investimento + Conversoes */}
-          {dailyData.length > 0 && (
+          {/* Grafico Investimento + Conversoes — oculto pra Gui Autocar */}
+          {dailyData.length > 0 && !isGuiAutocar && (
             <div className="chart-card">
               <h3 style={{ fontSize: 13, fontWeight: 700, marginBottom: 14 }}>Investimento & Conversoes por dia</h3>
               <ResponsiveContainer width="100%" height={260}>
