@@ -8,13 +8,13 @@ export const GA_PROJ = {
   metaLeads30d: 127,
   metaQualRate: 0.34,
   metaMeioRate: 0.16,
-  metaCloseRate: 0.31,   // 127 * 0.34 * 0.31 = 13.4 vendas/mes
+  metaCloseRate: 0.36,   // 127 * 0.34 * 0.36 = 15.5 vendas/mes -> R$44.400
   metaCostPerLead: 11.40,
   // Baseline mensal Google
   googleLeads30d: 53,
   googleQualRate: 0.49,  // Google converte mais qualificado
   googleMeioRate: 0.13,
-  googleCloseRate: 0.36, // 53 * 0.49 * 0.36 = 9.4 vendas/mes
+  googleCloseRate: 0.40, // 53 * 0.49 * 0.40 = 10.4 vendas/mes -> R$29.400
   googleCostPerLead: 16.30,
   // Baseline semanal Google Ads (usado na aba Google Ads)
   googleSpendPerWeek: 213.40,
