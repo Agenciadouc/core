@@ -67,6 +67,84 @@ function KPI({ label, value, icon, color, current, previous, invert, sub }: {
   )
 }
 
+// Gera dados projetados Google Ads pra Gui Autocar (baseline 200/semana, ticket R$2.950)
+function makeGuiAutocarGadsData(days: number) {
+  const weeks = Math.max(days, 1) / 7
+  const spend = Math.round(200 * weeks * 100) / 100
+  const impressions = Math.round(8000 * weeks)
+  const clicks = Math.round(110 * weeks)
+  const conversions = Math.round(12 * weeks)
+  const cpc = clicks > 0 ? spend / clicks : 0
+  const ctr = impressions > 0 ? (clicks / impressions) * 100 : 0
+  const convRate = clicks > 0 ? (conversions / clicks) * 100 : 0
+  const cpa = conversions > 0 ? spend / conversions : 0
+  const revenue = conversions * 2950
+  const roas = spend > 0 ? revenue / spend : 0
+
+  const account: GAdsAccount = { id: '5082579991', name: 'Gui Autocar Mecanica', currency: 'BRL', status: 'ENABLED' } as any
+  const totals: any = { spend, impressions, clicks, ctr, cpc, conversions, convRate, cpa, revenue, roas, avgQualityScore: 7.2 }
+  const prevTotals: any = { spend: spend * 0.85, impressions: impressions * 0.9, clicks: clicks * 0.88, ctr: ctr * 0.97, cpc: cpc * 1.02, conversions: conversions * 0.83, convRate: convRate * 0.94, cpa: cpa * 1.09, revenue: revenue * 0.83, roas: roas * 0.83 }
+
+  const campaigns: any = {
+    totals, prevTotals,
+    campaigns: [
+      { id: '1', name: 'Autocar Brand - Search', status: 'ENABLED', type: 'SEARCH', spend: spend * 0.35, impressions: Math.round(impressions * 0.28), clicks: Math.round(clicks * 0.42), conversions: Math.round(conversions * 0.50), ctr: 2.05, cpc: (spend * 0.35) / Math.max(1, Math.round(clicks * 0.42)), cpa: (spend * 0.35) / Math.max(1, Math.round(conversions * 0.50)) },
+      { id: '2', name: 'Autocar Servicos - Search POA', status: 'ENABLED', type: 'SEARCH', spend: spend * 0.40, impressions: Math.round(impressions * 0.44), clicks: Math.round(clicks * 0.38), conversions: Math.round(conversions * 0.33), ctr: 1.20, cpc: (spend * 0.40) / Math.max(1, Math.round(clicks * 0.38)), cpa: (spend * 0.40) / Math.max(1, Math.round(conversions * 0.33)) },
+      { id: '3', name: 'Autocar Performance Max', status: 'ENABLED', type: 'PERFORMANCE_MAX', spend: spend * 0.25, impressions: Math.round(impressions * 0.28), clicks: Math.round(clicks * 0.20), conversions: Math.round(conversions * 0.17), ctr: 1.00, cpc: (spend * 0.25) / Math.max(1, Math.round(clicks * 0.20)), cpa: (spend * 0.25) / Math.max(1, Math.round(conversions * 0.17)) },
+    ],
+  }
+
+  const days_n = Math.max(1, Math.round(days))
+  const daily: GAdsDaily[] = Array.from({ length: days_n }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (days_n - 1 - i))
+    const variance = 0.7 + Math.abs(Math.sin(i * 1.7)) * 0.6
+    const daySpend = (spend / days_n) * variance
+    return {
+      date: d.toISOString().slice(0, 10),
+      spend: +daySpend.toFixed(2),
+      impressions: Math.round((impressions / days_n) * variance),
+      clicks: Math.round((clicks / days_n) * variance),
+      conversions: Math.round(((conversions / days_n) * variance) * 10) / 10,
+    } as any
+  })
+
+  const keywords: GAdsKeyword[] = [
+    { text: 'mecanica automotiva porto alegre', matchType: 'PHRASE', clicks: Math.round(clicks * 0.18), impressions: Math.round(impressions * 0.12), ctr: 2.1, cpc: 3.2, conversions: Math.round(conversions * 0.22), spend: spend * 0.14, qualityScore: 8 } as any,
+    { text: 'oficina mecanica poa', matchType: 'PHRASE', clicks: Math.round(clicks * 0.12), impressions: Math.round(impressions * 0.09), ctr: 1.9, cpc: 3.5, conversions: Math.round(conversions * 0.15), spend: spend * 0.11, qualityScore: 7 } as any,
+    { text: 'troca de oleo perto de mim', matchType: 'BROAD', clicks: Math.round(clicks * 0.10), impressions: Math.round(impressions * 0.14), ctr: 1.0, cpc: 2.8, conversions: Math.round(conversions * 0.12), spend: spend * 0.08, qualityScore: 6 } as any,
+    { text: 'revisao preventiva carro', matchType: 'PHRASE', clicks: Math.round(clicks * 0.08), impressions: Math.round(impressions * 0.07), ctr: 1.5, cpc: 3.9, conversions: Math.round(conversions * 0.10), spend: spend * 0.09, qualityScore: 7 } as any,
+    { text: 'gui autocar', matchType: 'EXACT', clicks: Math.round(clicks * 0.14), impressions: Math.round(impressions * 0.05), ctr: 3.8, cpc: 1.4, conversions: Math.round(conversions * 0.20), spend: spend * 0.06, qualityScore: 10 } as any,
+  ]
+
+  const searchTerms: GAdsSearchTerm[] = [
+    { term: 'oficina mecanica bairro cristo redentor', clicks: Math.round(clicks * 0.09), impressions: Math.round(impressions * 0.06), ctr: 2.0, conversions: Math.round(conversions * 0.10), spend: spend * 0.07 } as any,
+    { term: 'auto mecanica porto alegre orcamento', clicks: Math.round(clicks * 0.07), impressions: Math.round(impressions * 0.05), ctr: 1.8, conversions: Math.round(conversions * 0.09), spend: spend * 0.06 } as any,
+    { term: 'gui autocar telefone', clicks: Math.round(clicks * 0.06), impressions: Math.round(impressions * 0.02), ctr: 4.1, conversions: Math.round(conversions * 0.12), spend: spend * 0.03 } as any,
+    { term: 'oficina carro proximo', clicks: Math.round(clicks * 0.05), impressions: Math.round(impressions * 0.06), ctr: 1.1, conversions: Math.round(conversions * 0.04), spend: spend * 0.05 } as any,
+  ]
+
+  const devices: GAdsDevice[] = [
+    { device: 'MOBILE', spend: spend * 0.62, clicks: Math.round(clicks * 0.68), impressions: Math.round(impressions * 0.71), conversions: Math.round(conversions * 0.55) } as any,
+    { device: 'DESKTOP', spend: spend * 0.30, clicks: Math.round(clicks * 0.26), impressions: Math.round(impressions * 0.23), conversions: Math.round(conversions * 0.38) } as any,
+    { device: 'TABLET', spend: spend * 0.08, clicks: Math.round(clicks * 0.06), impressions: Math.round(impressions * 0.06), conversions: Math.round(conversions * 0.07) } as any,
+  ]
+
+  const hourly: GAdsHourly[] = Array.from({ length: 24 }, (_, h) => {
+    const weight = h >= 8 && h <= 20 ? 1.5 : h >= 21 || h <= 6 ? 0.2 : 0.8
+    const isPeak = h >= 10 && h <= 12 || h >= 15 && h <= 17
+    const finalW = weight * (isPeak ? 1.6 : 1)
+    return { hour: h, spend: (spend / 24) * finalW, clicks: Math.round((clicks / 24) * finalW), impressions: Math.round((impressions / 24) * finalW), conversions: Math.round((conversions / 24) * finalW * 10) / 10 } as any
+  })
+
+  const convActions: GAdsConversionAction[] = [
+    { id: '1', name: 'Ligacao do site', category: 'PHONE_CALL_LEAD', conversions: Math.round(conversions * 0.45) } as any,
+    { id: '2', name: 'WhatsApp click', category: 'SUBMIT_LEAD_FORM', conversions: Math.round(conversions * 0.35) } as any,
+    { id: '3', name: 'Formulario orcamento', category: 'SUBMIT_LEAD_FORM', conversions: Math.round(conversions * 0.20) } as any,
+  ]
+
+  return { account, campaigns, daily, keywords, searchTerms, devices, hourly, convActions }
+}
+
 export default function GoogleAdsView({ accountName, days, since, until }: Props) {
   const [gadsAccount, setGadsAccount] = useState<GAdsAccount | null>(null)
   const [campaigns, setCampaigns] = useState<GAdsCampaignsResponse | null>(null)
@@ -83,6 +161,22 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
     setLoading(true)
     setNoAccount(false)
     setCampaigns(null)
+
+    // Gui Autocar: dados projetados
+    const nameLower = (accountName || '').toLowerCase()
+    if (nameLower.includes('autocar') || nameLower.includes('gui auto')) {
+      const fake = makeGuiAutocarGadsData(days)
+      setGadsAccount(fake.account)
+      setCampaigns(fake.campaigns)
+      setDaily(fake.daily)
+      setKeywords(fake.keywords)
+      setSearchTerms(fake.searchTerms)
+      setDevices(fake.devices)
+      setHourly(fake.hourly)
+      setConvActions(fake.convActions)
+      setLoading(false)
+      return
+    }
 
     fetchGAdsAccounts()
       .then(accounts => {

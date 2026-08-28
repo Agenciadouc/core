@@ -168,16 +168,18 @@ function KellermannCRM({ data, days, adSpend }: { data: CRMData; days: number; a
 }
 
 // ========== GUI AUTOCAR CRM (dados projetados) ==========
-// Baseline historico: 150 leads/mes, ticket medio R$ 2.950, ~33 vendas/mes = R$ 96k+ faturamento
-// Custo por lead ~R$ 10. Escala com adSpend real do periodo.
+// Baseline: 190 leads/mes (150 Meta + 40 Google), ticket R$ 2.950, ~42 vendas/mes
+// Vendas dividas 65% Meta / 35% Google. Escala com adSpend real do periodo.
 function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const daysScale = Math.max(days, 1) / 30
-  const LEADS_BASELINE_30D = 150
+  const LEADS_BASELINE_30D = 190  // 150 Meta + 40 Google
   const COST_PER_LEAD = 10
   const TICKET_MEDIO = 2950
   const QUAL_RATE = 0.40   // 40% dos leads viram qualificados
   const MEIO_RATE = 0.15   // 15% ficam meio termo
   const CLOSE_RATE = 0.55  // 55% dos qualificados fecham venda
+  const META_SHARE = 0.65  // % das vendas atribuidas a Meta
+  const GOOGLE_SHARE = 0.35
 
   // Leads: usa o maior entre baseline projetado e o que o spend indica (mais gasto = mais leads)
   const leadsBaseline = Math.round(LEADS_BASELINE_30D * daysScale)
@@ -188,7 +190,11 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const qualMeio = Math.round(totalLeads * MEIO_RATE)
   const qualNao = Math.max(0, totalLeads - qualSim - qualMeio)
   const vendas = Math.round(qualSim * CLOSE_RATE)
+  const vendasMeta = Math.round(vendas * META_SHARE)
+  const vendasGoogle = vendas - vendasMeta
   const faturamento = vendas * TICKET_MEDIO
+  const fatMeta = vendasMeta * TICKET_MEDIO
+  const fatGoogle = vendasGoogle * TICKET_MEDIO
   const qualRate = totalLeads > 0 ? ((qualSim / totalLeads) * 100).toFixed(1) : '0'
   const custoLead = totalLeads > 0 && adSpend ? adSpend / totalLeads : COST_PER_LEAD
   const custoQualif = qualSim > 0 && adSpend ? adSpend / qualSim : COST_PER_LEAD / QUAL_RATE
@@ -224,8 +230,12 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
           <Stat label="Custo por Lead (estimativa)" value={formatBRL(custoLead)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${totalLeads} leads` : `estimado`} icon={<TrendingDown size={16} />} color="#FFAA83" />
           <Stat label="Custo por Lead Qualif. (estimativa)" value={formatBRL(custoQualif)} sub={adSpend ? `R$ ${adSpend.toFixed(0)} / ${qualSim} qualif.` : `estimado`} icon={<UserCheck size={16} />} color="#34C759" />
           <Stat label="Vendas Fechadas (estimativa)" value={vendas} sub={`${qualSim > 0 ? ((vendas / qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#34C759" />
+          <Stat label="Vendas via Meta (estimativa)" value={vendasMeta} sub={`${Math.round(META_SHARE*100)}% das vendas`} icon={<ShoppingCart size={16} />} color="#1877F2" />
+          <Stat label="Vendas via Google (estimativa)" value={vendasGoogle} sub={`${Math.round(GOOGLE_SHARE*100)}% das vendas`} icon={<ShoppingCart size={16} />} color="#4285F4" />
           <Stat label="Ticket Medio (estimativa)" value={formatBRL(TICKET_MEDIO)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
-          <Stat label="Faturamento (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
+          <Stat label="Faturamento Meta (estimativa)" value={formatBRL(fatMeta)} sub={`${vendasMeta} vendas`} icon={<TrendingUp size={16} />} color="#1877F2" />
+          <Stat label="Faturamento Google (estimativa)" value={formatBRL(fatGoogle)} sub={`${vendasGoogle} vendas`} icon={<TrendingUp size={16} />} color="#4285F4" />
+          <Stat label="Faturamento Total (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
         </div>
       </section>
 
