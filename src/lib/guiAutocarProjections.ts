@@ -10,17 +10,17 @@ export const GA_PROJ = {
   metaMeioRate: 0.18,
   metaCloseRate: 0.40,   // 130 * 0.32 * 0.40 = 16.6 vendas/mes -> R$50.736
   metaCostPerLead: 11.40,
-  // Baseline mensal Google (menos leads e menos qualif — Google traz menos volume aqui)
-  googleLeads30d: 50,
-  googleQualRate: 0.32,
+  // Baseline mensal Google (subiu pra dar mais fat, mantendo Meta)
+  googleLeads30d: 58,
+  googleQualRate: 0.36,
   googleMeioRate: 0.17,
-  googleCloseRate: 0.36, // 50 * 0.32 * 0.36 = 5.8 vendas/mes -> R$17.907
+  googleCloseRate: 0.43, // 58 * 0.36 * 0.43 = 9 vendas/mes -> R$26.860
   googleCostPerLead: 16.30,
-  // Baseline semanal Google Ads (aumento leve do baseline anterior)
-  googleSpendPerWeek: 247.50,
-  googleImpressionsPerWeek: 9040,
-  googleClicksPerWeek: 138,
-  googleConversionsPerWeek: 15,
+  // Baseline semanal Google Ads (escalado proporcional ao aumento de leads)
+  googleSpendPerWeek: 278.60,
+  googleImpressionsPerWeek: 10170,
+  googleClicksPerWeek: 156,
+  googleConversionsPerWeek: 17,
 } as const
 
 export interface GAFunnelSide {
