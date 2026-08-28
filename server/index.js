@@ -1797,7 +1797,7 @@ const GADS = {
   redirectUri: process.env.GADS_REDIRECT_URI || `http://localhost:${PORT}/api/google-ads/callback`,
 }
 
-const GADS_API = 'https://googleads.googleapis.com/v20'
+const GADS_API = 'https://googleads.googleapis.com/v22'
 
 // Token cache
 let gadsTokenCache = { token: null, expiresAt: 0 }
