@@ -463,7 +463,7 @@ export default function OverviewView({ accountId, accountName, days, since, unti
             <div className="metric-card"><div className="metric-label">Impressoes</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.gads!.impressions)}</div></div>
             <div className="metric-card"><div className="metric-label">Cliques</div><div className="metric-value" style={{ fontSize: 18 }}>{formatNumber(s.gads!.clicks)}</div></div>
             <div className="metric-card"><div className="metric-label">Conversoes</div><div className="metric-value" style={{ fontSize: 18 }}>{s.gads!.conversions.toFixed(0)}</div></div>
-            {s.gads!.revenue > 0 && <div className="metric-card"><div className="metric-label">Receita</div><div className="metric-value" style={{ fontSize: 18 }}>{formatBRL(s.gads!.revenue)}</div></div>}
+            {s.gads!.revenue > 0 && !isGuiAutocar && <div className="metric-card"><div className="metric-label">Receita</div><div className="metric-value" style={{ fontSize: 18 }}>{formatBRL(s.gads!.revenue)}</div></div>}
           </div>
         </section>
       )}
