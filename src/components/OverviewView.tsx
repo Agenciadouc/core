@@ -513,7 +513,7 @@ export default function OverviewView({ accountId, accountName, days, since, unti
       {/* Vendas & Faturamento (Gui Autocar - estimativa dividida Meta/Google) */}
       {isGuiAutocar && hasCRM && (() => {
         const TICKET = 2950
-        const CLOSE = 0.55
+        const CLOSE = 0.33
         const vendasTot = Math.round(s.crm!.qualSim * CLOSE)
         // Divide vendas por proporcao de leads gerados por cada canal (Meta 79%, Google 21% do baseline 190)
         const vendasMeta = Math.round(vendasTot * 0.65)
@@ -525,7 +525,7 @@ export default function OverviewView({ accountId, accountName, days, since, unti
         const cpaVendaGoogle = vendasGoogle > 0 ? spendGads / vendasGoogle : 0
         return (
           <section className="dash-section">
-            <div className="section-title">Vendas & faturamento <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa (ticket medio R$ 2.950 · 55% fechamento dos qualificados)</span></div>
+            <div className="section-title">Vendas & faturamento <span style={{ fontSize: 11, fontWeight: 500, color: '#9B96B0', marginLeft: 8 }}>· estimativa (ticket medio R$ 2.950 · 33% fechamento dos qualificados)</span></div>
             <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))' }}>
               <div className="metric-card"><div className="metric-label">Vendas Meta (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#1877F2' }}>{vendasMeta}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaMeta)}</div></div>
               <div className="metric-card"><div className="metric-label">Vendas Google (estimativa)</div><div className="metric-value" style={{ fontSize: 20, color: '#4285F4' }}>{vendasGoogle}</div><div className="metric-sub">CPA venda: {formatBRL(cpaVendaGoogle)}</div></div>

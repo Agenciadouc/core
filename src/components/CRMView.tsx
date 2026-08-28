@@ -177,7 +177,7 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const TICKET_MEDIO = 2950
   const QUAL_RATE = 0.40   // 40% dos leads viram qualificados
   const MEIO_RATE = 0.15   // 15% ficam meio termo
-  const CLOSE_RATE = 0.55  // 55% dos qualificados fecham venda
+  const CLOSE_RATE = 0.33  // 33% dos qualificados fecham venda (alvo R$70k/mes)
   const META_SHARE = 0.65  // % das vendas atribuidas a Meta
   const GOOGLE_SHARE = 0.35
 
