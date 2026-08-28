@@ -187,7 +187,7 @@ export default function OverviewView({ accountId, accountName, days, since, unti
   const nameLower = (accountName || '').toLowerCase()
   const isGuiAutocar = nameLower.includes('autocar') || nameLower.includes('gui auto')
 
-  // Gui Autocar: injeta dados projetados Google Ads + CRM (baseline 200/semana, ticket R$2.950)
+  // Gui Autocar: injeta dados projetados Google Ads + CRM (fonte: lib/guiAutocarProjections)
   const _guiProj = isGuiAutocar ? getGuiAutocarProjection(days, s.meta?.spend) : null
   if (isGuiAutocar && _guiProj) {
     const g = _guiProj.gads

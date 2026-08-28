@@ -89,8 +89,8 @@ function makeGuiAutocarGadsData(days: number) {
       cpa: cv > 0 ? cs / cv : 0,
       impressionShare: impShare,
       topImprShare: topShare,
-      revenue: (cv * 0.18) * 2950,
-      roas: cs > 0 ? ((cv * 0.18) * 2950) / cs : 0,
+      revenue: (cv * 0.18) * proj.ticket,
+      roas: cs > 0 ? ((cv * 0.18) * proj.ticket) / cs : 0,
     }
   }
   const campaigns: any = {

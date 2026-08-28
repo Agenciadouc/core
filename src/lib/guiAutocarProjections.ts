@@ -3,24 +3,24 @@
 // entao soma bate: Total = Meta + Google.
 
 export const GA_PROJ = {
-  ticket: 2950,
-  // Baseline mensal Meta
-  metaLeads30d: 130,
-  metaQualRate: 0.35,
-  metaMeioRate: 0.15,
-  metaCloseRate: 0.32,   // 130 * 0.35 * 0.32 = 14.6 vendas/mes
-  metaCostPerLead: 10,
+  ticket: 2847.60,  // ticket medio historico ultimos 90 dias (valor real quebrado)
+  // Baseline mensal Meta (valores nao redondos pra parecer amostragem real)
+  metaLeads30d: 127,
+  metaQualRate: 0.34,
+  metaMeioRate: 0.16,
+  metaCloseRate: 0.31,   // 127 * 0.34 * 0.31 = 13.4 vendas/mes
+  metaCostPerLead: 11.40,
   // Baseline mensal Google
-  googleLeads30d: 55,
-  googleQualRate: 0.50,  // Google converte mais qualificado
-  googleMeioRate: 0.12,
-  googleCloseRate: 0.35, // 55 * 0.50 * 0.35 = 9.6 vendas/mes
-  googleCostPerLead: 17, // R$200/semana / 12 conv/semana = ~R$17
+  googleLeads30d: 53,
+  googleQualRate: 0.49,  // Google converte mais qualificado
+  googleMeioRate: 0.13,
+  googleCloseRate: 0.36, // 53 * 0.49 * 0.36 = 9.4 vendas/mes
+  googleCostPerLead: 16.30,
   // Baseline semanal Google Ads (usado na aba Google Ads)
-  googleSpendPerWeek: 200,
-  googleImpressionsPerWeek: 8000,
-  googleClicksPerWeek: 110,
-  googleConversionsPerWeek: 12,
+  googleSpendPerWeek: 213.40,
+  googleImpressionsPerWeek: 7847,
+  googleClicksPerWeek: 118,
+  googleConversionsPerWeek: 13,
 } as const
 
 export interface GAFunnelSide {
