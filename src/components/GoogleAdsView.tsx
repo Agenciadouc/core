@@ -104,24 +104,54 @@ function makeGuiAutocarGadsData(days: number) {
     totals, prevTotals,
     campaigns: [
       mkCamp('1', 'Autocar Brand - Search', 'SEARCH', 0.35, 0.28, 0.42, 0.50, 84.5, 62.0),
-      mkCamp('2', 'Autocar Servicos - Search POA', 'SEARCH', 0.40, 0.44, 0.38, 0.33, 42.3, 25.4),
+      mkCamp('2', 'Autocar Servicos - Search Ararangua', 'SEARCH', 0.40, 0.44, 0.38, 0.33, 42.3, 25.4),
       mkCamp('3', 'Autocar Performance Max', 'PERFORMANCE_MAX', 0.25, 0.28, 0.20, 0.17, 0, 0),
     ],
   }
 
+  // Pseudo-random deterministico por dia — combina 4 senos com freq/fase diferentes
+  // + boost meio de semana (ter-qui) + queda domingo pra parecer padrao real de setor auto
+  const hash = (i: number, seed: number) => {
+    const x = Math.sin((i + 1) * (12.9898 + seed * 2.7)) * 43758.5453
+    return x - Math.floor(x)
+  }
   const days_n = Math.max(1, Math.round(days))
-  const daily: GAdsDaily[] = Array.from({ length: days_n }, (_, i) => {
+  const daily: GAdsDaily[] = []
+  let sumSpend = 0, sumImp = 0, sumClk = 0, sumConv = 0
+  const rawWeights: number[] = []
+  for (let i = 0; i < days_n; i++) {
     const d = new Date(); d.setDate(d.getDate() - (days_n - 1 - i))
-    const variance = 0.7 + Math.abs(Math.sin(i * 1.7)) * 0.6
-    const daySpend = (spend / days_n) * variance
-    return {
+    const dow = d.getDay() // 0 dom, 6 sab
+    const weekly = dow === 0 ? 0.4 : dow === 6 ? 0.65 : dow >= 2 && dow <= 4 ? 1.25 : 1.0
+    const noise = 0.6 + hash(i, 1) * 0.9  // ruido 0.6-1.5
+    const spike = hash(i, 3) > 0.85 ? 1.4 : hash(i, 3) < 0.10 ? 0.35 : 1.0  // ~15% picos, ~10% quedas fortes
+    rawWeights.push(weekly * noise * spike)
+  }
+  const wSum = rawWeights.reduce((a, b) => a + b, 0)
+  for (let i = 0; i < days_n; i++) {
+    const d = new Date(); d.setDate(d.getDate() - (days_n - 1 - i))
+    const w = rawWeights[i] / wSum // normaliza pra fracao do total
+    const daySpend = spend * w
+    const dayImp = Math.round(impressions * w)
+    const dayClk = Math.round(clicks * w)
+    // conversoes: correlacionadas com cliques mas com CVR variando (algumas dias 0 conv)
+    const cvrJitter = 0.5 + hash(i, 7) * 1.2  // 0.5-1.7x
+    const dayConv = hash(i, 11) < 0.15 ? 0 : Math.max(0, Math.round((conversions * w * cvrJitter) * 10) / 10)
+    sumSpend += daySpend; sumImp += dayImp; sumClk += dayClk; sumConv += dayConv
+    daily.push({
       date: d.toISOString().slice(0, 10),
       spend: +daySpend.toFixed(2),
-      impressions: Math.round((impressions / days_n) * variance),
-      clicks: Math.round((clicks / days_n) * variance),
-      conversions: Math.round(((conversions / days_n) * variance) * 10) / 10,
-    } as any
-  })
+      impressions: dayImp,
+      clicks: dayClk,
+      conversions: dayConv,
+    } as any)
+  }
+  // Ajuste fino: se soma de conversoes divergiu do target, distribui a diferenca no ultimo dia
+  const convDelta = conversions - sumConv
+  if (Math.abs(convDelta) > 0.5 && daily.length > 0) {
+    const last = daily[daily.length - 1] as any
+    last.conversions = Math.max(0, Math.round((last.conversions + convDelta) * 10) / 10)
+  }
 
   const mkKw = (kw: string, match: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number, qs: number) => {
     const cs = spend * sFrac, ci = Math.round(impressions * iFrac), cc = Math.max(1, Math.round(clicks * cFrac)), cv = Math.max(0, Math.round(conversions * cvFrac))
@@ -129,8 +159,8 @@ function makeGuiAutocarGadsData(days: number) {
   }
   const keywords: GAdsKeyword[] = [
     mkKw('gui autocar', 'EXACT', 0.06, 0.05, 0.14, 0.20, 10),
-    mkKw('mecanica automotiva porto alegre', 'PHRASE', 0.14, 0.12, 0.18, 0.22, 8),
-    mkKw('oficina mecanica poa', 'PHRASE', 0.11, 0.09, 0.12, 0.15, 7),
+    mkKw('mecanica automotiva ararangua', 'PHRASE', 0.14, 0.12, 0.18, 0.22, 8),
+    mkKw('oficina mecanica ararangua sc', 'PHRASE', 0.11, 0.09, 0.12, 0.15, 7),
     mkKw('revisao preventiva carro', 'PHRASE', 0.09, 0.07, 0.08, 0.10, 7),
     mkKw('troca de oleo perto de mim', 'BROAD', 0.08, 0.14, 0.10, 0.12, 6),
   ]
@@ -141,9 +171,9 @@ function makeGuiAutocarGadsData(days: number) {
   }
   const searchTerms: GAdsSearchTerm[] = [
     mkTerm('gui autocar telefone', 'Autocar Brand - Search', 0.03, 0.02, 0.06, 0.12),
-    mkTerm('oficina mecanica bairro cristo redentor', 'Autocar Servicos - Search POA', 0.07, 0.06, 0.09, 0.10),
-    mkTerm('auto mecanica porto alegre orcamento', 'Autocar Servicos - Search POA', 0.06, 0.05, 0.07, 0.09),
-    mkTerm('oficina carro proximo', 'Autocar Servicos - Search POA', 0.05, 0.06, 0.05, 0.04),
+    mkTerm('oficina mecanica bairro urussanga', 'Autocar Servicos - Search Ararangua', 0.07, 0.06, 0.09, 0.10),
+    mkTerm('auto mecanica ararangua orcamento', 'Autocar Servicos - Search Ararangua', 0.06, 0.05, 0.07, 0.09),
+    mkTerm('oficina carro proximo', 'Autocar Servicos - Search Ararangua', 0.05, 0.06, 0.05, 0.04),
   ]
 
   const mkDev = (device: string, sFrac: number, iFrac: number, cFrac: number, cvFrac: number) => {
