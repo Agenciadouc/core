@@ -468,8 +468,8 @@ export default function OverviewView({ accountId, accountName, days, since, unti
         </section>
       )}
 
-      {/* GA4 resumo */}
-      {hasGA4 && (
+      {/* GA4 resumo — oculto pra Gui Autocar */}
+      {hasGA4 && !isGuiAutocar && (
         <section className="dash-section">
           <div className="section-title">Site (Analytics)</div>
           <div className="metrics-grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))' }}>
