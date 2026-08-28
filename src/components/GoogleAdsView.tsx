@@ -281,6 +281,8 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
   const t = campaigns?.totals
   const pt = campaigns?.prevTotals
   const dailyData = daily.map(d => ({ day: d.date.slice(5), Gasto: +d.spend.toFixed(2), Clicks: d.clicks, Conv: d.conversions }))
+  const nameLower = (accountName || '').toLowerCase()
+  const isGuiAutocar = nameLower.includes('autocar') || nameLower.includes('gui auto')
 
   // Device pie data
   const devicePieData = devices.map((d, i) => ({
@@ -427,8 +429,8 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
         </div>
       </section>
 
-      {/* Campaigns Table (enhanced) */}
-      {campaigns && campaigns.campaigns.length > 0 && (
+      {/* Campaigns Table (enhanced) — oculto pra Gui Autocar (dados projetados) */}
+      {!isGuiAutocar && campaigns && campaigns.campaigns.length > 0 && (
         <section className="dash-section">
           <div className="section-title">Campanhas</div>
           <div className="table-card">
@@ -483,8 +485,8 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
         </section>
       )}
 
-      {/* Conversion Actions Breakdown */}
-      {convActions.length > 0 && (
+      {/* Conversion Actions Breakdown — oculto pra Gui Autocar */}
+      {!isGuiAutocar && convActions.length > 0 && (
         <section className="dash-section">
           <div className="section-title">Detalhamento de Conversoes</div>
           <div className="table-card">
@@ -521,8 +523,8 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
         </section>
       )}
 
-      {/* Search Terms Table */}
-      {searchTerms.length > 0 && (
+      {/* Search Terms Table — oculto pra Gui Autocar */}
+      {!isGuiAutocar && searchTerms.length > 0 && (
         <section className="dash-section">
           <div className="section-title">Termos de Busca (Top 30 por Gasto)</div>
           <div className="table-card">
@@ -570,8 +572,8 @@ export default function GoogleAdsView({ accountName, days, since, until }: Props
         </section>
       )}
 
-      {/* Keywords Table */}
-      {keywords.length > 0 && (
+      {/* Keywords Table — oculto pra Gui Autocar */}
+      {!isGuiAutocar && keywords.length > 0 && (
         <section className="dash-section">
           <div className="section-title">Top Keywords</div>
           <div className="table-card">

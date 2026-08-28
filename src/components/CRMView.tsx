@@ -199,16 +199,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const custoLead = totalLeads > 0 && adSpend ? adSpend / totalLeads : COST_PER_LEAD
   const custoQualif = qualSim > 0 && adSpend ? adSpend / qualSim : COST_PER_LEAD / QUAL_RATE
 
-  // Distribuicao entre "corretores" (atendentes) — Gui e BM
-  const guiLeads = Math.round(totalLeads * 0.60)
-  const bmLeads = totalLeads - guiLeads
-  const guiSim = Math.round(guiLeads * QUAL_RATE)
-  const bmSim = qualSim - guiSim
-  const guiMeio = Math.round(guiLeads * MEIO_RATE)
-  const bmMeio = qualMeio - guiMeio
-  const guiNao = guiLeads - guiSim - guiMeio
-  const bmNao = bmLeads - bmSim - bmMeio
-
   // Distribuicao por canal
   const canais = [
     { name: 'Instagram / Direct', frac: 0.42 },
@@ -236,44 +226,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
           <Stat label="Faturamento Meta (estimativa)" value={formatBRL(fatMeta)} sub={`${vendasMeta} vendas`} icon={<TrendingUp size={16} />} color="#1877F2" />
           <Stat label="Faturamento Google (estimativa)" value={formatBRL(fatGoogle)} sub={`${vendasGoogle} vendas`} icon={<TrendingUp size={16} />} color="#4285F4" />
           <Stat label="Faturamento Total (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
-        </div>
-      </section>
-
-      <section className="dash-section">
-        <div className="table-card">
-          <div className="table-header"><h3>Leads por Atendente <span style={{ fontSize: 11, fontWeight: 400, color: '#9B96B0', marginLeft: 6 }}>(estimativa)</span></h3></div>
-          <div style={{ overflowX: 'auto' }}>
-            <table className="campaign-table">
-              <thead>
-                <tr>
-                  <th>Atendente</th>
-                  <th className="right">Leads</th>
-                  <th className="right">SIM</th>
-                  <th className="right">Meio Termo</th>
-                  <th className="right">NAO</th>
-                  <th className="right">% Qualif.</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="name">Guilherme</td>
-                  <td className="right" style={{ fontWeight: 600, color: '#fff' }}>{guiLeads}</td>
-                  <td className="right" style={{ color: '#34C759' }}>{guiSim}</td>
-                  <td className="right" style={{ color: '#FFB300' }}>{guiMeio}</td>
-                  <td className="right" style={{ color: '#FFAA83' }}>{guiNao}</td>
-                  <td className="right"><span className="change-badge positive">{guiLeads > 0 ? ((guiSim / guiLeads) * 100).toFixed(0) : 0}%</span></td>
-                </tr>
-                <tr>
-                  <td className="name">Bruno (BM)</td>
-                  <td className="right" style={{ fontWeight: 600, color: '#fff' }}>{bmLeads}</td>
-                  <td className="right" style={{ color: '#34C759' }}>{bmSim}</td>
-                  <td className="right" style={{ color: '#FFB300' }}>{bmMeio}</td>
-                  <td className="right" style={{ color: '#FFAA83' }}>{bmNao}</td>
-                  <td className="right"><span className="change-badge positive">{bmLeads > 0 ? ((bmSim / bmLeads) * 100).toFixed(0) : 0}%</span></td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
         </div>
       </section>
 
