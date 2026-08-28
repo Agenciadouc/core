@@ -1140,15 +1140,14 @@ export default function CRMView({ accountId, accountName, days, adSpend }: Props
       .finally(() => setLoading(false))
   }, [accountId, accountName, days])
 
-  if (loading) return <div className="loading-container"><div className="spinner" /><span>Carregando CRM...</span></div>
-
   // Gui Autocar: dados projetados (baseline 150 leads/mes, ticket R$5.9k, 89k/mes historico)
-  // Renderiza antes do gate 'available' pq nao depende de planilha CRM real
+  // Renderiza antes de loading/available pq nao depende de planilha CRM real
   const nameLower = (accountName || '').toLowerCase()
   if (nameLower.includes('autocar') || nameLower.includes('gui auto')) {
     return <GuiAutocarCRM days={days} adSpend={adSpend} />
   }
 
+  if (loading) return <div className="loading-container"><div className="spinner" /><span>Carregando CRM...</span></div>
   if (!data?.available) return null
 
   if (data.crmType === 'kellermann') return <KellermannCRM data={data} days={days} adSpend={adSpend} />
