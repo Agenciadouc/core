@@ -192,7 +192,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
   const qualRate = totalLeads > 0 ? ((qualSim / totalLeads) * 100).toFixed(1) : '0'
   const custoLead = totalLeads > 0 && adSpend ? adSpend / totalLeads : COST_PER_LEAD
   const custoQualif = qualSim > 0 && adSpend ? adSpend / qualSim : COST_PER_LEAD / QUAL_RATE
-  const roas = adSpend && adSpend > 0 ? faturamento / adSpend : null
 
   // Distribuicao entre "corretores" (atendentes) — Gui e BM
   const guiLeads = Math.round(totalLeads * 0.60)
@@ -227,9 +226,6 @@ function GuiAutocarCRM({ days, adSpend }: { days: number; adSpend?: number }) {
           <Stat label="Vendas Fechadas (estimativa)" value={vendas} sub={`${qualSim > 0 ? ((vendas / qualSim) * 100).toFixed(0) : 0}% dos qualificados`} icon={<ShoppingCart size={16} />} color="#34C759" />
           <Stat label="Ticket Medio (estimativa)" value={formatBRL(TICKET_MEDIO)} sub="Historico ultimo trimestre" icon={<TrendingUp size={16} />} color="#5DADE2" />
           <Stat label="Faturamento (estimativa)" value={formatBRL(faturamento)} sub={`${vendas} vendas x ${formatBRL(TICKET_MEDIO)}`} icon={<TrendingUp size={16} />} color="#34C759" />
-          {roas !== null && (
-            <Stat label="ROAS (estimativa)" value={`${roas.toFixed(1)}x`} sub={`${formatBRL(faturamento)} / ${formatBRL(adSpend || 0)}`} icon={<TrendingUp size={16} />} color="#5DADE2" />
-          )}
         </div>
       </section>
 
