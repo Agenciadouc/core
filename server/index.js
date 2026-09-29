@@ -1004,13 +1004,21 @@ app.get('/api/crm/:accountId', auth, async (req, res) => {
         const c = data.cascade || {}
         const calc = data.calc || {}
         const cfg = data.config || {}
+        // stages_raw vem do embed: [{id, name, color, position, is_conversion, count}]
+        // Ordem preservada por 'position' (mesma ordem visual do CRM Dros)
+        const funnelStages = (data.stages_raw || []).map(s => ({
+          name: s.name,
+          count: s.count || 0,
+          color: s.color,
+          isConversion: !!s.is_conversion,
+        }))
         return res.json({
           available: true,
           crmType: 'dros-crm',
           source: 'CRM Dros',
           account: data.account,
           month: data.month,
-          // Metricas dos 6 cards no topo
+          // 6 cards no topo (mesmo layout do print do cliente)
           metrics: {
             investment: cfg.ad_investment || 0,
             cpl: calc.cpl,
@@ -1021,18 +1029,7 @@ app.get('/api/crm/:accountId', auth, async (req, res) => {
             won: c.won || 0,
             target_progress: calc.target_progress,
           },
-          // Funil por etapa (nomes canonicos do CRM Dros)
-          funnelStages: [
-            { name: 'Novo Lead', count: c.total || 0 },
-            { name: 'Contato Feito', count: c.contato || 0 },
-            { name: 'Em Atendimento', count: c.atendimento || 0 },
-            { name: 'Qualificado', count: c.qualificado || 0 },
-            { name: 'Visita Agendada', count: c.visita || 0 },
-            { name: 'Proposta', count: c.proposta || 0 },
-            { name: 'Venda', count: c.won || 0 },
-            { name: 'Perdido', count: c.perdido || 0 },
-            { name: 'Acompanhamento', count: c.acompanhamento || 0 },
-          ],
+          funnelStages,
         })
       } catch (err) {
         console.error('[CRM Dros]', err.message)

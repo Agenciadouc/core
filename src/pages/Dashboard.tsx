@@ -321,7 +321,10 @@ export default function Dashboard() {
 
             {/* Tab: Overview */}
             {clientTab === 'overview' && (
-              <OverviewView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} since={datePeriod === 'custom' ? customDateFrom : undefined} until={datePeriod === 'custom' ? customDateTo : undefined} />
+              <>
+                <OverviewView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} since={datePeriod === 'custom' ? customDateFrom : undefined} until={datePeriod === 'custom' ? customDateTo : undefined} />
+                <CRMView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} adSpend={current ? parseFloat(current.spend) : undefined} />
+              </>
             )}
 
             {/* Tab: Meta Ads */}
@@ -528,7 +531,10 @@ export default function Dashboard() {
 
             {/* Tab: Google Ads */}
             {clientTab === 'googleads' && (
-              <GoogleAdsView accountName={selectedAccount.name} days={getEffectiveDays()} since={datePeriod === 'custom' ? customDateFrom : undefined} until={datePeriod === 'custom' ? customDateTo : undefined} />
+              <>
+                <GoogleAdsView accountName={selectedAccount.name} days={getEffectiveDays()} since={datePeriod === 'custom' ? customDateFrom : undefined} until={datePeriod === 'custom' ? customDateTo : undefined} />
+                <CRMView accountId={selectedAccount.id} accountName={selectedAccount.name} days={getEffectiveDays()} adSpend={current ? parseFloat(current.spend) : undefined} />
+              </>
             )}
 
             {/* Tab: Analytics */}
