@@ -725,6 +725,23 @@ const CRM_SHEETS = {
   'bg imob': { id: '1dZjSUqcZJ_4IDyXhRrY9i9GcJvqxCLYp3YTl7Ij45zY', type: 'bgimob' },
   'bg im': { id: '1dZjSUqcZJ_4IDyXhRrY9i9GcJvqxCLYp3YTl7Ij45zY', type: 'bgimob' },
   'fernando correa': { id: '1Eg5qp_3ErytuayQwMinKBjB0emBFoC11veiSdlr3m3o', type: 'fernando' },
+  // Clientes que usam CRM Dros — puxa via /api/embed/funnel/:slug do CRM
+  'mazin':      { type: 'dros-crm', slug: 'mazin-imobiliaria-ltda' },
+  'quimiprol':  { type: 'dros-crm', slug: 'quimiprol' },
+  'ustulimp':   { type: 'dros-crm', slug: 'ustulimp-comercio-de-produtos-de-limpeza-ltda' },
+  'solclor':    { type: 'dros-crm', slug: 'solclor' },
+}
+
+// Config do adapter CRM Dros
+const CRM_DROS_BASE = process.env.CRM_DROS_BASE || 'https://drosagencia.com.br/crm'
+const CRM_DROS_SECRET = process.env.CRM_EMBED_SECRET || process.env.CORE_EMBED_SECRET || 'dros-core-embed-2026-shared-key'
+
+// Fetch funnel + metricas do CRM Dros pelo slug da conta
+async function fetchDrosCRMFunnel(slug, month = 'current') {
+  const url = `${CRM_DROS_BASE}/api/embed/funnel/${encodeURIComponent(slug)}/${month}`
+  const resp = await fetch(url, { headers: { 'X-Core-Secret': CRM_DROS_SECRET } })
+  if (!resp.ok) throw new Error(`CRM Dros embed HTTP ${resp.status}`)
+  return resp.json()
 }
 
 function getCRMConfig(accountName) {
@@ -977,6 +994,51 @@ app.get('/api/crm/:accountId', auth, async (req, res) => {
     const days = parseInt(req.query.days || '7')
     const config = getCRMConfig(accountName)
     if (!config) return res.json({ available: false })
+
+    // CRM Dros — funil + metricas via /api/embed/funnel/:slug do proprio CRM.
+    // Retorna shape compativel com o widget "Funil por etapa" + cards
+    // Investimento/CPL/CAC/Faturamento/ROAS/Meta do frontend do Core.
+    if (config.type === 'dros-crm') {
+      try {
+        const data = await fetchDrosCRMFunnel(config.slug, 'current')
+        const c = data.cascade || {}
+        const calc = data.calc || {}
+        const cfg = data.config || {}
+        return res.json({
+          available: true,
+          crmType: 'dros-crm',
+          source: 'CRM Dros',
+          account: data.account,
+          month: data.month,
+          // Metricas dos 6 cards no topo
+          metrics: {
+            investment: cfg.ad_investment || 0,
+            cpl: calc.cpl,
+            cac: calc.cac,
+            revenue: calc.estimated_revenue || 0,
+            roas: calc.roas,
+            target: cfg.sales_target || 0,
+            won: c.won || 0,
+            target_progress: calc.target_progress,
+          },
+          // Funil por etapa (nomes canonicos do CRM Dros)
+          funnelStages: [
+            { name: 'Novo Lead', count: c.total || 0 },
+            { name: 'Contato Feito', count: c.contato || 0 },
+            { name: 'Em Atendimento', count: c.atendimento || 0 },
+            { name: 'Qualificado', count: c.qualificado || 0 },
+            { name: 'Visita Agendada', count: c.visita || 0 },
+            { name: 'Proposta', count: c.proposta || 0 },
+            { name: 'Venda', count: c.won || 0 },
+            { name: 'Perdido', count: c.perdido || 0 },
+            { name: 'Acompanhamento', count: c.acompanhamento || 0 },
+          ],
+        })
+      } catch (err) {
+        console.error('[CRM Dros]', err.message)
+        return res.json({ available: false, error: 'crm_dros_fetch_failed', detail: err.message })
+      }
+    }
 
     // Ludus has its own response format (sales-based, not lead-based)
     if (config.type === 'ludus') {
